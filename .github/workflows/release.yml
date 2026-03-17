@@ -1,0 +1,107 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: macos-14
+
+    steps:
+      # ── 1. Checkout ─────────────────────────────────────────────────────────
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      # ── 2. Import Developer ID certificate ──────────────────────────────────
+      - name: Import Developer ID certificate
+        env:
+          CERT_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE }}
+          CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/release.keychain"
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+
+          echo "$CERT_BASE64" | base64 --decode > "$CERT_PATH"
+          security create-keychain -p "release-keychain-pw" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "release-keychain-pw" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" \
+            -P "$CERT_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+          # Allow codesign to use the key without prompts
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s \
+            -k "release-keychain-pw" \
+            "$KEYCHAIN_PATH"
+
+      # ── 3. Download Sparkle sign_update ─────────────────────────────────────
+      - name: Download Sparkle sign_update
+        run: |
+          SPARKLE_VERSION="2.6.4"
+          curl -L "https://github.com/sparkle-project/Sparkle/releases/download/$SPARKLE_VERSION/Sparkle-$SPARKLE_VERSION.tar.xz" \
+            -o /tmp/sparkle.tar.xz
+          tar -xf /tmp/sparkle.tar.xz -C /tmp --strip-components=0
+          echo "SIGN_UPDATE_PATH=/tmp/bin/sign_update" >> "$GITHUB_ENV"
+
+      # ── 4. Set version vars ──────────────────────────────────────────────────
+      - name: Set version variables
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          BUILD_NUMBER="${GITHUB_RUN_NUMBER}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "DMG_NAME=Knok-${VERSION}.dmg" >> "$GITHUB_ENV"
+
+      # ── 5. Full release pipeline ─────────────────────────────────────────────
+      - name: Build, sign, notarize, package
+        env:
+          DEVELOPER_ID: ${{ secrets.DEVELOPER_ID_NAME }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          chmod +x scripts/build-release.sh
+          ./scripts/build-release.sh "$VERSION" "$BUILD_NUMBER"
+
+      # ── 7. Commit updated appcast.xml to main ────────────────────────────────
+      - name: Commit appcast.xml
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          # Copy the updated appcast from our tagged commit's work
+          git checkout "${GITHUB_SHA}" -- appcast.xml
+          git add appcast.xml
+          git diff --cached --quiet || git commit -m "chore: update appcast.xml for v${VERSION} [skip ci]"
+          git push origin main
+
+      # ── 8. Create GitHub Release ─────────────────────────────────────────────
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v${VERSION}" \
+            ".artifacts/${DMG_NAME}" \
+            --title "Knok v${VERSION}" \
+            --generate-notes
+
+      # ── 9. Cleanup keychain ──────────────────────────────────────────────────
+      - name: Cleanup keychain
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/release.keychain" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/cert.p12" "$RUNNER_TEMP/sparkle_key"

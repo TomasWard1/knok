@@ -1,22 +1,46 @@
-// PLACEHOLDER — to be implemented by agent
 import AppKit
 import SwiftUI
 import KnokCore
 
+// Custom panel that can become key window (required for SwiftUI button clicks)
+private class ClickablePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
+// Custom window that can become key (for break-level fullscreen)
+private class ClickableWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
+// Hosting view that accepts first mouse click without needing focus
+private class FirstClickHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 @MainActor
 final class WindowManager {
     private var activeWindows: [NSWindow] = []
+    private var currentCompletion: ((AlertResponse) -> Void)?
 
     func showAlert(payload: AlertPayload, completion: @escaping (AlertResponse) -> Void) {
+        // Dismiss previous windows without calling previous completion
+        for window in activeWindows {
+            window.close()
+        }
+        activeWindows.removeAll()
+        currentCompletion = completion
+
         switch payload.level {
         case .whisper:
-            showWhisper(payload: payload, completion: completion)
+            showWhisper(payload: payload)
         case .nudge:
-            showNudge(payload: payload, completion: completion)
+            showNudge(payload: payload)
         case .knock:
-            showKnock(payload: payload, completion: completion)
+            showKnock(payload: payload)
         case .break:
-            showBreak(payload: payload, completion: completion)
+            showBreak(payload: payload)
         }
     }
 
@@ -27,88 +51,140 @@ final class WindowManager {
         activeWindows.removeAll()
     }
 
+    private func complete(_ response: AlertResponse) {
+        dismissAll()
+        let completion = currentCompletion
+        currentCompletion = nil
+        completion?(response)
+    }
+
     // MARK: - Whisper (menu bar flash)
 
-    private func showWhisper(payload: AlertPayload, completion: @escaping (AlertResponse) -> Void) {
-        // Whisper shows a small floating panel near the menu bar
-        let view = WhisperView(payload: payload) {
-            completion(.dismissed)
+    private func showWhisper(payload: AlertPayload) {
+        let view = WhisperView(payload: payload) { [weak self] in
+            self?.complete(.dismissed)
         }
-        let panel = makePanel(
-            content: view,
-            level: .floating,
-            size: NSSize(width: 320, height: 80)
+        let size = NSSize(width: 340, height: 90)
+        let panel = NSPanel(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
         )
-        positionNearMenuBar(panel)
-        showAndTrack(panel)
+        panel.level = .floating
+        panel.isFloatingPanel = true
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.contentView = FirstClickHostingView(rootView:
+            view.frame(width: size.width, height: size.height)
+        )
+        positionBottomRight(panel)
+        panel.orderFrontRegardless()
+        activeWindows.append(panel)
 
         // Auto-dismiss whisper after 5 seconds if no TTL set
         let ttl = payload.ttl > 0 ? payload.ttl : 5
         DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(ttl)) { [weak self] in
-            if self?.activeWindows.contains(where: { $0 === panel }) == true {
-                panel.close()
-                self?.activeWindows.removeAll { $0 === panel }
-                completion(.timeout)
-            }
+            guard let self, self.activeWindows.contains(where: { $0 === panel }) else { return }
+            self.complete(.timeout)
         }
     }
 
     // MARK: - Nudge (floating banner)
 
-    private func showNudge(payload: AlertPayload, completion: @escaping (AlertResponse) -> Void) {
-        let view = NudgeView(payload: payload) { response in
-            completion(response)
+    private func showNudge(payload: AlertPayload) {
+        let view = NudgeView(payload: payload) { [weak self] response in
+            self?.complete(response)
         }
-        let panel = makePanel(
-            content: view,
-            level: .floating,
-            size: NSSize(width: 400, height: 160)
+
+        let width: CGFloat = 360
+        let wrappedView = view.frame(width: width).fixedSize(horizontal: false, vertical: true)
+        let hostingView = FirstClickHostingView(rootView: wrappedView)
+        let fittingSize = hostingView.fittingSize
+        let size = NSSize(width: width, height: fittingSize.height)
+        hostingView.setFrameSize(size)
+
+        let panel = ClickablePanel(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
         )
-        positionTopRight(panel)
-        showAndTrack(panel)
+        panel.level = .floating
+        panel.isFloatingPanel = true
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.contentView = hostingView
+        positionBottomRight(panel)
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKeyAndOrderFront(nil)
+        activeWindows.append(panel)
+
+        // Auto-dismiss nudge after TTL if set
+        if payload.ttl > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(payload.ttl)) { [weak self] in
+                guard let self, self.activeWindows.contains(where: { $0 === panel }) else { return }
+                self.complete(.timeout)
+            }
+        }
     }
 
     // MARK: - Knock (overlay)
 
-    private func showKnock(payload: AlertPayload, completion: @escaping (AlertResponse) -> Void) {
-        let view = KnockView(payload: payload) { response in
-            completion(response)
-        }
-        let panel = makePanel(
-            content: view,
-            level: .modalPanel,
-            size: NSSize(width: 500, height: 300)
-        )
-        panel.backgroundColor = NSColor.black.withAlphaComponent(0.4)
-        centerOnScreen(panel)
-        showAndTrack(panel)
+    private func showKnock(payload: AlertPayload) {
+        guard let screen = NSScreen.main else { return }
 
-        // Also show a dimming overlay behind
-        for screen in NSScreen.screens {
-            let dimWindow = NSWindow(
-                contentRect: screen.frame,
-                styleMask: .borderless,
-                backing: .buffered,
-                defer: false
-            )
-            dimWindow.level = .modalPanel - 1
-            dimWindow.backgroundColor = NSColor.black.withAlphaComponent(0.3)
-            dimWindow.isOpaque = false
-            dimWindow.ignoresMouseEvents = true
-            dimWindow.orderFront(nil)
-            activeWindows.append(dimWindow)
+        let view = KnockView(payload: payload) { [weak self] response in
+            self?.complete(response)
         }
+
+        let hostingView = FirstClickHostingView(rootView: view.fixedSize())
+        hostingView.setFrameSize(hostingView.fittingSize)
+        let size = hostingView.fittingSize
+
+        let panel = ClickablePanel(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.level = .modalPanel
+        panel.isFloatingPanel = true
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.contentView = hostingView
+
+        // Center horizontally, top of visible area with padding
+        let x = screen.visibleFrame.midX - size.width / 2
+        let y = screen.visibleFrame.maxY - size.height - 12
+        panel.setFrameOrigin(NSPoint(x: x, y: y))
+
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKeyAndOrderFront(nil)
+        activeWindows.append(panel)
     }
 
     // MARK: - Break (full-screen takeover)
 
-    private func showBreak(payload: AlertPayload, completion: @escaping (AlertResponse) -> Void) {
-        let view = BreakView(payload: payload) { response in
-            completion(response)
+    private func showBreak(payload: AlertPayload) {
+        let view = BreakView(payload: payload) { [weak self] response in
+            self?.complete(response)
         }
 
         for screen in NSScreen.screens {
-            let window = NSWindow(
+            let window = ClickableWindow(
                 contentRect: screen.frame,
                 styleMask: .borderless,
                 backing: .buffered,
@@ -118,28 +194,36 @@ final class WindowManager {
             window.backgroundColor = .clear
             window.isOpaque = false
             window.hasShadow = false
+            window.isReleasedWhenClosed = false
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
-            // Only put the interactive content on the main screen
             if screen == NSScreen.main {
-                window.contentView = NSHostingView(rootView: view)
+                window.contentView = FirstClickHostingView(rootView: view)
             } else {
-                // Other screens get a blur overlay
-                let blurView = BreakBackdropView()
-                window.contentView = NSHostingView(rootView: blurView)
+                window.contentView = NSHostingView(rootView: BreakBackdropView())
             }
 
             window.orderFrontRegardless()
             activeWindows.append(window)
         }
+
+        // Activate app and make main screen window key
+        NSApp.activate(ignoringOtherApps: true)
+        if let mainWindow = activeWindows.last(where: { $0.screen == NSScreen.main }) {
+            mainWindow.makeKeyAndOrderFront(nil)
+        }
     }
 
     // MARK: - Helpers
 
-    private func makePanel<V: View>(content: V, level: NSWindow.Level, size: NSSize) -> NSPanel {
-        let panel = NSPanel(
+    private func makePanel<V: View>(content: V, level: NSWindow.Level, size: NSSize, canActivate: Bool) -> NSPanel {
+        let styleMask: NSWindow.StyleMask = canActivate
+            ? [.titled, .closable, .fullSizeContentView]
+            : [.nonactivatingPanel, .fullSizeContentView]
+
+        let panel = ClickablePanel(
             contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.nonactivatingPanel, .hudWindow],
+            styleMask: styleMask,
             backing: .buffered,
             defer: false
         )
@@ -147,15 +231,22 @@ final class WindowManager {
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
-        panel.contentView = NSHostingView(rootView: content)
+        panel.titlebarAppearsTransparent = true
+        panel.titleVisibility = .hidden
+        panel.isMovableByWindowBackground = true
+        panel.backgroundColor = .clear
+        panel.contentView = NSHostingView(rootView:
+            content
+                .frame(width: size.width, height: size.height)
+        )
         return panel
     }
 
-    private func positionNearMenuBar(_ window: NSWindow) {
+    private func positionBottomRight(_ window: NSWindow) {
         guard let screen = NSScreen.main else { return }
         let screenFrame = screen.visibleFrame
         let x = screenFrame.maxX - window.frame.width - 16
-        let y = screenFrame.maxY - window.frame.height - 8
+        let y = screenFrame.minY + 16
         window.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
@@ -169,10 +260,5 @@ final class WindowManager {
 
     private func centerOnScreen(_ window: NSWindow) {
         window.center()
-    }
-
-    private func showAndTrack(_ window: NSWindow) {
-        window.orderFrontRegardless()
-        activeWindows.append(window)
     }
 }

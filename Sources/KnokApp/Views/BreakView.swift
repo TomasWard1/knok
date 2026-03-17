@@ -1,93 +1,153 @@
 import SwiftUI
+import AppKit
 import KnokCore
 
 struct BreakView: View {
     let payload: AlertPayload
     let onAction: (AlertResponse) -> Void
 
-    @State private var scale: CGFloat = 0.5
+    @State private var scale: CGFloat = 0.85
     @State private var opacity: Double = 0
     @State private var pulseAmount: CGFloat = 1
+    @State private var backdropOpacity: Double = 0
+
+    private var accent: Color { payload.resolvedAccentColor() }
 
     var body: some View {
         ZStack {
-            // Blurred background
-            Color.black.opacity(0.7)
+            // Dimmed backdrop
+            Color.black.opacity(0.65)
                 .ignoresSafeArea()
+                .opacity(backdropOpacity)
 
-            VStack(spacing: 32) {
-                // Pulsing alert icon
-                Image(systemName: "exclamationmark.octagon.fill")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.red)
+            // Central glassmorphic card
+            VStack(spacing: 28) {
+                // Pulsing icon
+                Image(systemName: payload.resolvedIcon())
+                    .font(.system(size: 52, weight: .medium))
+                    .foregroundStyle(accent)
                     .scaleEffect(pulseAmount)
+                    .shadow(color: accent.opacity(0.4), radius: 20)
 
-                VStack(spacing: 12) {
+                // Title + message
+                VStack(spacing: 10) {
                     Text(payload.title)
-                        .font(.largeTitle)
-                        .fontWeight(.black)
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
                         .multilineTextAlignment(.center)
+                        .lineLimit(3)
 
                     if let message = payload.message {
                         Text(message)
-                            .font(.title3)
-                            .foregroundStyle(.white.opacity(0.8))
+                            .font(.system(size: 20, design: .rounded))
+                            .foregroundStyle(.white.opacity(0.6))
                             .multilineTextAlignment(.center)
-                            .lineLimit(8)
+                            .lineLimit(5)
                     }
                 }
 
-                HStack(spacing: 16) {
+                // Action buttons
+                HStack(spacing: 12) {
                     if payload.actions.isEmpty {
-                        Button("Acknowledge") {
+                        breakButton(label: "Acknowledge", icon: nil, accent: accent) {
                             onAction(.dismissed)
                         }
-                        .buttonStyle(BreakButtonStyle())
                     } else {
                         ForEach(payload.actions, id: \.id) { action in
-                            Button(action.label) {
+                            breakButton(
+                                label: action.label,
+                                icon: action.icon ?? (action.url != nil ? "arrow.up.right" : nil),
+                                accent: accent
+                            ) {
+                                if let urlString = action.url, let url = URL(string: urlString) {
+                                    NSWorkspace.shared.open(url)
+                                }
                                 onAction(.buttonClicked(action.id))
                             }
-                            .buttonStyle(BreakButtonStyle())
                         }
                     }
                 }
             }
             .padding(48)
+            .background {
+                ZStack {
+                    VisualEffectBackground(
+                        material: .fullScreenUI,
+                        blendingMode: .behindWindow
+                    )
+                    .opacity(0.5)
+
+                    Color.white.opacity(0.08)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [.white.opacity(0.2), .white.opacity(0.05)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ),
+                        lineWidth: 0.5
+                    )
+            )
+            .shadow(color: .black.opacity(0.5), radius: 40, y: 10)
             .scaleEffect(scale)
             .opacity(opacity)
         }
         .onAppear {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) {
+            withAnimation(.easeOut(duration: 0.3)) {
+                backdropOpacity = 1
+            }
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
                 scale = 1
                 opacity = 1
             }
-            withAnimation(.easeInOut(duration: 1).repeatForever(autoreverses: true)) {
-                pulseAmount = 1.1
+            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                pulseAmount = 1.08
             }
+        }
+    }
+
+    @ViewBuilder
+    private func breakButton(label: String, icon: String?, accent: Color, action: @escaping () -> Void) -> some View {
+        Button {
+            action()
+        } label: {
+            HStack(spacing: 8) {
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                Text(label)
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 14)
+            .background(accent.opacity(0.7))
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { inside in
+            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
     }
 }
 
-struct BreakButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.title3.bold())
-            .foregroundStyle(.white)
-            .padding(.horizontal, 32)
-            .padding(.vertical, 14)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.red)
-                    .opacity(configuration.isPressed ? 0.7 : 1)
-            )
-    }
-}
-
 struct BreakBackdropView: View {
+    @State private var opacity: Double = 0
+
     var body: some View {
-        Color.black.opacity(0.7)
+        Color.black.opacity(0.65)
             .ignoresSafeArea()
+            .opacity(opacity)
+            .onAppear {
+                withAnimation(.easeOut(duration: 0.3)) {
+                    opacity = 1
+                }
+            }
     }
 }

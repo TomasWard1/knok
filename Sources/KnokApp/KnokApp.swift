@@ -7,10 +7,10 @@ struct KnokApp: App {
 
     var body: some Scene {
         MenuBarExtra("Knok", systemImage: "bell.badge") {
-            MenuBarView()
+            MenuBarView(history: appDelegate.alertHistory, updater: appDelegate.updaterController.updater)
         }
         Settings {
-            SettingsView()
+            SettingsView(settings: appDelegate.settings)
         }
     }
 }
