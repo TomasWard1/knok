@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>CFBundleExecutable</key>
+    <string>Knok</string>
     <key>CFBundleName</key>
     <string>Knok</string>
     <key>CFBundleIdentifier</key>
@@ -16,5 +18,9 @@
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
+    <key>SUFeedURL</key>
+    <string>https://raw.githubusercontent.com/TomasWard1/knok/main/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>1oO20R6iw8ZX8FUNfiRWPcFqmgjRNsMsSrUbOv4sW9o=</string>
 </dict>
 </plist>
