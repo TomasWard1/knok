@@ -1,0 +1,35 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build release binaries
+        run: swift build -c release
+
+      - name: Package binaries
+        run: |
+          mkdir -p dist
+          cp .build/release/knok dist/
+          cp .build/release/knok-mcp dist/
+          cp .build/release/KnokApp dist/
+          cd dist && tar czf ../knok-${{ github.ref_name }}-arm64-macos.tar.gz *
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ github.ref_name }} \
+            knok-${{ github.ref_name }}-arm64-macos.tar.gz \
+            --title "Knok ${{ github.ref_name }}" \
+            --generate-notes

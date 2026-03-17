@@ -1,22 +1,22 @@
-name: Build & Test
+name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
-    branches: [main]
+    branches: [staging, main]
+  push:
+    branches: [staging]
 
 jobs:
-  build:
+  build-and-test:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_16.2.app
 
       - name: Build all targets
         run: swift build
 
       - name: Run tests
         run: swift test
+
+      - name: Build release
+        run: swift build -c release
