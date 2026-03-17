@@ -1,8 +1,10 @@
 import SwiftUI
 import KnokCore
+import Sparkle
 
 struct MenuBarView: View {
     @ObservedObject var history: AlertHistory
+    var updater: SPUUpdater?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -63,6 +65,19 @@ struct MenuBarView: View {
 
                     Divider()
                 }
+
+                Button {
+                    updater?.checkForUpdates()
+                } label: {
+                    Text("Check for Updates...")
+                        .font(.system(.caption, design: .rounded))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+
+                Divider()
 
                 Button {
                     NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
