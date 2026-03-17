@@ -4,13 +4,18 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   build-release:
-    runs-on: macos-14
+    runs-on: macos-15
+    # Skip if commit message contains [skip ci] or if it's the appcast commit
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
 
     steps:
       # ── 1. Checkout ─────────────────────────────────────────────────────────
@@ -58,11 +63,22 @@ jobs:
       # ── 4. Set version vars ──────────────────────────────────────────────────
       - name: Set version variables
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            # Auto-bump patch from latest tag
+            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+            IFS='.' read -r MAJOR MINOR PATCH <<< "${LATEST_TAG#v}"
+            VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+            # Create and push the new tag
+            git tag "v$VERSION"
+            git push origin "v$VERSION"
+          fi
           BUILD_NUMBER="${GITHUB_RUN_NUMBER}"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
           echo "DMG_NAME=Knok-${VERSION}.dmg" >> "$GITHUB_ENV"
+          echo "Version: $VERSION, Build: $BUILD_NUMBER"
 
       # ── 5. Full release pipeline ─────────────────────────────────────────────
       - name: Build, sign, notarize, package
