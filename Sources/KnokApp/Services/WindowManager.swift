@@ -59,11 +59,22 @@ final class WindowManager {
         let view = WhisperView(payload: payload) { [weak self] in
             self?.complete(.dismissed)
         }
-        let panel = makePanel(
-            content: view,
-            level: .floating,
-            size: NSSize(width: 320, height: 56),
-            canActivate: false
+        let size = NSSize(width: 340, height: 90)
+        let panel = NSPanel(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        panel.level = .floating
+        panel.isFloatingPanel = true
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = false
+        panel.contentView = NSHostingView(rootView:
+            view.frame(width: size.width, height: size.height)
         )
         positionBottomRight(panel)
         panel.orderFrontRegardless()
@@ -192,8 +203,6 @@ final class WindowManager {
         panel.contentView = NSHostingView(rootView:
             content
                 .frame(width: size.width, height: size.height)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
         )
         return panel
     }

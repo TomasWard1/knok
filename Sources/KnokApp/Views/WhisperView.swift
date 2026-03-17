@@ -1,5 +1,26 @@
 import SwiftUI
+import AppKit
 import KnokCore
+
+// Real behind-window blur using NSVisualEffectView
+struct VisualEffectBackground: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+    let blendingMode: NSVisualEffectView.BlendingMode
+
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = material
+        view.blendingMode = blendingMode
+        view.state = .active
+        view.isEmphasized = true
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
+        nsView.material = material
+        nsView.blendingMode = blendingMode
+    }
+}
 
 struct WhisperView: View {
     let payload: AlertPayload
@@ -9,33 +30,63 @@ struct WhisperView: View {
     @State private var opacity: Double = 0
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
+            // Accent stripe
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(accentColor)
+                .frame(width: 3)
+                .padding(.vertical, 4)
+
             Image(systemName: iconName)
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(accentColor)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(payload.title)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.primary)
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
                     .lineLimit(1)
 
                 if let message = payload.message {
                     Text(message)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 16, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.6))
                         .lineLimit(1)
                 }
             }
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
         .frame(width: 320)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
+        .background {
+            ZStack {
+                // Behind-window blur — light material for translucency
+                VisualEffectBackground(
+                    material: .fullScreenUI,
+                    blendingMode: .behindWindow
+                )
+                .opacity(0.6)
+
+                // Glossy white tint
+                Color.white.opacity(0.12)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [.white.opacity(0.25), .white.opacity(0.08)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 0.5
+                )
+        )
+        .shadow(color: .black.opacity(0.3), radius: 20, y: 8)
         .offset(y: offset)
         .opacity(opacity)
         .onAppear {
