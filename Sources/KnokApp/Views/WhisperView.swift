@@ -33,13 +33,13 @@ struct WhisperView: View {
         HStack(spacing: 12) {
             // Accent stripe
             RoundedRectangle(cornerRadius: 1.5)
-                .fill(accentColor)
+                .fill(payload.resolvedAccentColor())
                 .frame(width: 3)
                 .padding(.vertical, 4)
 
-            Image(systemName: iconName)
+            Image(systemName: payload.resolvedIcon())
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(accentColor)
+                .foregroundStyle(payload.resolvedAccentColor())
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(payload.title)
@@ -95,6 +95,9 @@ struct WhisperView: View {
                 opacity = 1
             }
         }
+        .onHover { inside in
+            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+        }
         .onTapGesture {
             dismissWithAnimation()
         }
@@ -110,31 +113,4 @@ struct WhisperView: View {
         }
     }
 
-    private var iconName: String {
-        if payload.title.localizedCaseInsensitiveContains("build") ||
-           payload.title.localizedCaseInsensitiveContains("deploy") {
-            return "bolt.fill"
-        }
-        if payload.title.localizedCaseInsensitiveContains("test") {
-            return "checkmark.circle.fill"
-        }
-        if payload.title.localizedCaseInsensitiveContains("error") ||
-           payload.title.localizedCaseInsensitiveContains("fail") {
-            return "xmark.circle.fill"
-        }
-        return "bell.fill"
-    }
-
-    private var accentColor: Color {
-        if payload.title.localizedCaseInsensitiveContains("error") ||
-           payload.title.localizedCaseInsensitiveContains("fail") {
-            return .red
-        }
-        if payload.title.localizedCaseInsensitiveContains("build") ||
-           payload.title.localizedCaseInsensitiveContains("deploy") ||
-           payload.title.localizedCaseInsensitiveContains("pass") {
-            return .green
-        }
-        return .blue
-    }
 }

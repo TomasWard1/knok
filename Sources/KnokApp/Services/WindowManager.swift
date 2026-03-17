@@ -14,6 +14,11 @@ private class ClickableWindow: NSWindow {
     override var canBecomeMain: Bool { true }
 }
 
+// Hosting view that accepts first mouse click without needing focus
+private class FirstClickHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 @MainActor
 final class WindowManager {
     private var activeWindows: [NSWindow] = []
@@ -73,7 +78,8 @@ final class WindowManager {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
-        panel.contentView = NSHostingView(rootView:
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.contentView = FirstClickHostingView(rootView:
             view.frame(width: size.width, height: size.height)
         )
         positionBottomRight(panel)
@@ -94,48 +100,77 @@ final class WindowManager {
         let view = NudgeView(payload: payload) { [weak self] response in
             self?.complete(response)
         }
-        let panel = makePanel(
-            content: view,
-            level: .floating,
-            size: NSSize(width: 400, height: 160),
-            canActivate: true
+
+        let width: CGFloat = 360
+        let wrappedView = view.frame(width: width).fixedSize(horizontal: false, vertical: true)
+        let hostingView = FirstClickHostingView(rootView: wrappedView)
+        let fittingSize = hostingView.fittingSize
+        let size = NSSize(width: width, height: fittingSize.height)
+        hostingView.setFrameSize(size)
+
+        let panel = ClickablePanel(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
         )
-        positionTopRight(panel)
+        panel.level = .floating
+        panel.isFloatingPanel = true
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        panel.hasShadow = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.contentView = hostingView
+        positionBottomRight(panel)
+        NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         activeWindows.append(panel)
+
+        // Auto-dismiss nudge after TTL if set
+        if payload.ttl > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(payload.ttl)) { [weak self] in
+                guard let self, self.activeWindows.contains(where: { $0 === panel }) else { return }
+                self.complete(.timeout)
+            }
+        }
     }
 
     // MARK: - Knock (overlay)
 
     private func showKnock(payload: AlertPayload) {
-        // First, show dimming overlays behind
-        for screen in NSScreen.screens {
-            let dimWindow = NSWindow(
-                contentRect: screen.frame,
-                styleMask: .borderless,
-                backing: .buffered,
-                defer: false
-            )
-            dimWindow.level = .modalPanel - 1
-            dimWindow.backgroundColor = NSColor.black.withAlphaComponent(0.3)
-            dimWindow.isOpaque = false
-            dimWindow.ignoresMouseEvents = true
-            dimWindow.orderFrontRegardless()
-            activeWindows.append(dimWindow)
-        }
+        guard let screen = NSScreen.main else { return }
 
-        // Then show the interactive panel on top
         let view = KnockView(payload: payload) { [weak self] response in
             self?.complete(response)
         }
-        let panel = makePanel(
-            content: view,
-            level: .modalPanel,
-            size: NSSize(width: 500, height: 300),
-            canActivate: true
+
+        let hostingView = FirstClickHostingView(rootView: view.fixedSize())
+        hostingView.setFrameSize(hostingView.fittingSize)
+        let size = hostingView.fittingSize
+
+        let panel = ClickablePanel(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
         )
+        panel.level = .modalPanel
+        panel.isFloatingPanel = true
+        panel.hidesOnDeactivate = false
+        panel.isReleasedWhenClosed = false
         panel.backgroundColor = .clear
-        centerOnScreen(panel)
+        panel.isOpaque = false
+        panel.hasShadow = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.contentView = hostingView
+
+        // Center horizontally, top of visible area with padding
+        let x = screen.visibleFrame.midX - size.width / 2
+        let y = screen.visibleFrame.maxY - size.height - 12
+        panel.setFrameOrigin(NSPoint(x: x, y: y))
+
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         activeWindows.append(panel)
@@ -163,7 +198,7 @@ final class WindowManager {
             window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
 
             if screen == NSScreen.main {
-                window.contentView = NSHostingView(rootView: view)
+                window.contentView = FirstClickHostingView(rootView: view)
             } else {
                 window.contentView = NSHostingView(rootView: BreakBackdropView())
             }
