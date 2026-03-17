@@ -5,6 +5,7 @@ import KnokCore
 struct KnockView: View {
     let payload: AlertPayload
     let onAction: (AlertResponse) -> Void
+    @Environment(\.knokFontScale) private var scale
 
     @State private var offset: CGFloat = -60
     @State private var opacity: Double = 0
@@ -20,19 +21,19 @@ struct KnockView: View {
 
             // Icon
             Image(systemName: payload.resolvedIcon())
-                .font(.system(size: 20, weight: .medium))
+                .font(.system(size: 20 * scale, weight: .medium))
                 .foregroundStyle(accent)
 
             // Title + message
             VStack(alignment: .leading, spacing: 2) {
                 Text(payload.title)
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .font(.system(size: 18 * scale, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white)
                     .lineLimit(1)
 
                 if let message = payload.message {
                     Text(message)
-                        .font(.system(size: 15, design: .rounded))
+                        .font(.system(size: 15 * scale, design: .rounded))
                         .foregroundStyle(.white.opacity(0.55))
                         .lineLimit(1)
                 }
@@ -47,7 +48,7 @@ struct KnockView: View {
                         dismissWithAnimation { onAction(.dismissed) }
                     } label: {
                         Text("Dismiss")
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .font(.system(size: 13 * scale, weight: .medium, design: .rounded))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 18)
                             .padding(.vertical, 9)
@@ -69,10 +70,10 @@ struct KnockView: View {
                             HStack(spacing: 5) {
                                 if let btnIcon = action.icon ?? (action.url != nil ? "arrow.up.right" : nil) {
                                     Image(systemName: btnIcon)
-                                        .font(.system(size: 10, weight: .semibold))
+                                        .font(.system(size: 10 * scale, weight: .semibold))
                                 }
                                 Text(action.label)
-                                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                                    .font(.system(size: 13 * scale, weight: .medium, design: .rounded))
                             }
                             .foregroundStyle(.white)
                             .padding(.horizontal, 18)

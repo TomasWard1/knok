@@ -5,8 +5,9 @@ import KnokCore
 struct BreakView: View {
     let payload: AlertPayload
     let onAction: (AlertResponse) -> Void
+    @Environment(\.knokFontScale) private var scale
 
-    @State private var scale: CGFloat = 0.85
+    @State private var cardScale: CGFloat = 0.85
     @State private var opacity: Double = 0
     @State private var pulseAmount: CGFloat = 1
     @State private var backdropOpacity: Double = 0
@@ -24,7 +25,7 @@ struct BreakView: View {
             VStack(spacing: 28) {
                 // Pulsing icon
                 Image(systemName: payload.resolvedIcon())
-                    .font(.system(size: 52, weight: .medium))
+                    .font(.system(size: 52 * scale, weight: .medium))
                     .foregroundStyle(accent)
                     .scaleEffect(pulseAmount)
                     .shadow(color: accent.opacity(0.4), radius: 20)
@@ -32,14 +33,14 @@ struct BreakView: View {
                 // Title + message
                 VStack(spacing: 10) {
                     Text(payload.title)
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .font(.system(size: 32 * scale, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
                         .multilineTextAlignment(.center)
                         .lineLimit(3)
 
                     if let message = payload.message {
                         Text(message)
-                            .font(.system(size: 20, design: .rounded))
+                            .font(.system(size: 20 * scale, design: .rounded))
                             .foregroundStyle(.white.opacity(0.6))
                             .multilineTextAlignment(.center)
                             .lineLimit(5)
@@ -94,7 +95,7 @@ struct BreakView: View {
                     )
             )
             .shadow(color: .black.opacity(0.5), radius: 40, y: 10)
-            .scaleEffect(scale)
+            .scaleEffect(cardScale)
             .opacity(opacity)
         }
         .onAppear {
@@ -102,7 +103,7 @@ struct BreakView: View {
                 backdropOpacity = 1
             }
             withAnimation(.spring(response: 0.5, dampingFraction: 0.75)) {
-                scale = 1
+                cardScale = 1
                 opacity = 1
             }
             withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
@@ -119,10 +120,10 @@ struct BreakView: View {
             HStack(spacing: 8) {
                 if let icon {
                     Image(systemName: icon)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 14 * scale, weight: .semibold))
                 }
                 Text(label)
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .font(.system(size: 18 * scale, weight: .semibold, design: .rounded))
             }
             .foregroundStyle(.white)
             .padding(.horizontal, 28)
