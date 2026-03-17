@@ -62,10 +62,10 @@ final class WindowManager {
         let panel = makePanel(
             content: view,
             level: .floating,
-            size: NSSize(width: 320, height: 80),
+            size: NSSize(width: 320, height: 56),
             canActivate: false
         )
-        positionNearMenuBar(panel)
+        positionBottomRight(panel)
         panel.orderFrontRegardless()
         activeWindows.append(panel)
 
@@ -198,11 +198,11 @@ final class WindowManager {
         return panel
     }
 
-    private func positionNearMenuBar(_ window: NSWindow) {
+    private func positionBottomRight(_ window: NSWindow) {
         guard let screen = NSScreen.main else { return }
         let screenFrame = screen.visibleFrame
         let x = screenFrame.maxX - window.frame.width - 16
-        let y = screenFrame.maxY - window.frame.height - 8
+        let y = screenFrame.minY + 16
         window.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
