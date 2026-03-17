@@ -1,4 +1,3 @@
-// PLACEHOLDER — to be implemented by agent
 import AppKit
 import KnokCore
 
@@ -7,7 +6,6 @@ final class AlertEngine {
     private var windowManager: WindowManager?
     private var ttsManager: TTSManager?
     private var soundManager: SoundManager?
-    private var currentCompletion: ((AlertResponse) -> Void)?
 
     nonisolated init() {}
 
@@ -20,11 +18,7 @@ final class AlertEngine {
     func showAlert(payload: AlertPayload, completion: @escaping (AlertResponse) -> Void) {
         ensureInitialized()
 
-        // Dismiss any current alert
-        dismissCurrent()
-        currentCompletion = completion
-
-        // Play sound for knock and break levels
+        // Play sound
         switch payload.level {
         case .whisper:
             soundManager?.playWhisper()
@@ -36,24 +30,18 @@ final class AlertEngine {
 
         // TTS if requested
         if payload.tts {
-            let text = payload.message ?? payload.title
-            ttsManager?.speak(text)
+            ttsManager?.speak(payload.message ?? payload.title)
         }
 
-        // Show the appropriate view
+        // Show the appropriate view — WindowManager owns the completion
         windowManager?.showAlert(payload: payload) { [weak self] response in
             self?.ttsManager?.stop()
-            self?.currentCompletion?(response)
-            self?.currentCompletion = nil
+            completion(response)
         }
     }
 
     func dismissCurrent() {
         ttsManager?.stop()
         windowManager?.dismissAll()
-        if let completion = currentCompletion {
-            completion(.dismissed)
-            currentCompletion = nil
-        }
     }
 }

@@ -18,6 +18,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         socketServer?.start()
     }
 
+    // Prevent app from quitting when last window closes
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         socketServer?.stop()
         // Clean up socket file
