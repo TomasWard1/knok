@@ -3,6 +3,9 @@ import KnokCore
 
 @MainActor
 final class AlertEngine {
+    lazy var history = AlertHistory()
+    var settings: AppSettings?
+
     private var windowManager: WindowManager?
     private var ttsManager: TTSManager?
     private var soundManager: SoundManager?
@@ -18,24 +21,50 @@ final class AlertEngine {
     func showAlert(payload: AlertPayload, completion: @escaping (AlertResponse) -> Void) {
         ensureInitialized()
 
-        // Play sound
-        switch payload.level {
-        case .whisper:
-            soundManager?.playWhisper()
-        case .nudge:
-            soundManager?.playNudge()
-        case .knock, .break:
-            soundManager?.playKnock()
+        let itemId = history.record(payload: payload)
+
+        // Apply volume from settings
+        if let volume = settings?.soundVolume {
+            soundManager?.volume = Float(volume)
         }
 
-        // TTS if requested
-        if payload.tts {
+        // Play sound if enabled
+        if settings?.soundEnabled != false {
+            switch payload.level {
+            case .whisper:
+                if settings?.whisperSoundEnabled != false {
+                    soundManager?.playWhisper()
+                }
+            case .nudge:
+                if settings?.nudgeSoundEnabled != false {
+                    soundManager?.playNudge()
+                }
+            case .knock:
+                if settings?.knockSoundEnabled != false {
+                    soundManager?.playKnock()
+                }
+            case .break:
+                if settings?.breakSoundEnabled != false {
+                    soundManager?.playBreak()
+                }
+            }
+        }
+
+        // TTS if requested and enabled
+        if payload.tts && settings?.ttsEnabled != false {
+            if let voice = settings?.ttsVoice, !voice.isEmpty {
+                ttsManager?.setVoice(voice)
+            }
+            if let rate = settings?.ttsRate {
+                ttsManager?.setRate(rate)
+            }
             ttsManager?.speak(payload.message ?? payload.title)
         }
 
-        // Show the appropriate view — WindowManager owns the completion
+        // Show the appropriate view -- WindowManager owns the completion
         windowManager?.showAlert(payload: payload) { [weak self] response in
             self?.ttsManager?.stop()
+            self?.history.recordResponse(response, for: itemId)
             completion(response)
         }
     }

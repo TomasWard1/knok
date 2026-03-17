@@ -32,6 +32,14 @@ let alertInputSchema: Value = .object([
                 "properties": .object([
                     "label": .object(["type": .string("string")]),
                     "id": .object(["type": .string("string")]),
+                    "url": .object([
+                        "type": .string("string"),
+                        "description": .string("URL to open in browser when button is clicked"),
+                    ]),
+                    "icon": .object([
+                        "type": .string("string"),
+                        "description": .string("SF Symbol for the button icon"),
+                    ]),
                 ]),
             ]),
         ]),
@@ -39,6 +47,14 @@ let alertInputSchema: Value = .object([
             "type": .string("integer"),
             "description": .string("Auto-dismiss after N seconds (0 = never)"),
             "default": .int(0),
+        ]),
+        "icon": .object([
+            "type": .string("string"),
+            "description": .string("SF Symbol name for the alert icon (e.g. 'video.fill', 'bolt.fill')"),
+        ]),
+        "color": .object([
+            "type": .string("string"),
+            "description": .string("Hex accent color (e.g. '#A855F7'). Auto-detected from title if omitted"),
         ]),
     ]),
     "required": .array([.string("level"), .string("title")]),
@@ -94,6 +110,8 @@ await server.withMethodHandler(CallTool.self) { params in
     let message = args["message"]?.stringValue
     let tts = args["tts"]?.boolValue ?? false
     let ttl = args["ttl"]?.intValue ?? 0
+    let icon = args["icon"]?.stringValue
+    let color = args["color"]?.stringValue
 
     // Parse actions
     var actions: [AlertAction] = []
@@ -102,7 +120,9 @@ await server.withMethodHandler(CallTool.self) { params in
             if case .object(let obj) = actionValue,
                let label = obj["label"]?.stringValue,
                let id = obj["id"]?.stringValue {
-                actions.append(AlertAction(label: label, id: id))
+                let actionUrl = obj["url"]?.stringValue
+                let actionIcon = obj["icon"]?.stringValue
+                actions.append(AlertAction(label: label, id: id, url: actionUrl, icon: actionIcon))
             }
         }
     }
@@ -114,7 +134,9 @@ await server.withMethodHandler(CallTool.self) { params in
         message: message,
         tts: tts,
         actions: actions,
-        ttl: ttl
+        ttl: ttl,
+        icon: icon,
+        color: color
     )
 
     let client = SocketClient()

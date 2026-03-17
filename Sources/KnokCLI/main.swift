@@ -30,11 +30,18 @@ struct AlertOptions: ParsableArguments {
     @Option(name: .long, help: "Auto-dismiss after N seconds (0 = never)")
     var ttl: Int = 0
 
+    @Option(name: .long, help: "SF Symbol name for the alert icon (e.g. 'bolt.fill')")
+    var icon: String?
+
+    @Option(name: .long, help: "Hex accent color (e.g. '#A855F7')")
+    var color: String?
+
     func parseActions() -> [AlertAction] {
         action.compactMap { str in
-            let parts = str.split(separator: ":", maxSplits: 1)
-            guard parts.count == 2 else { return nil }
-            return AlertAction(label: String(parts[0]), id: String(parts[1]))
+            let parts = str.split(separator: ":", maxSplits: 2)
+            guard parts.count >= 2 else { return nil }
+            let url = parts.count >= 3 ? String(parts[2]) : nil
+            return AlertAction(label: String(parts[0]), id: String(parts[1]), url: url)
         }
     }
 }
@@ -98,7 +105,9 @@ func sendAlert(level: AlertLevel, options: AlertOptions) throws {
         message: options.title != nil ? options.message : nil,
         tts: options.tts,
         actions: options.parseActions(),
-        ttl: options.ttl
+        ttl: options.ttl,
+        icon: options.icon,
+        color: options.color
     )
 
     let client = SocketClient()

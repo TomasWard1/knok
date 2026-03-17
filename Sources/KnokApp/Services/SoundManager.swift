@@ -2,15 +2,27 @@ import AppKit
 
 @MainActor
 final class SoundManager {
+    var volume: Float = 0.7
+
+    private func play(_ name: String) {
+        guard let sound = NSSound(named: name) else { return }
+        sound.volume = volume
+        sound.play()
+    }
+
     func playWhisper() {
-        NSSound(named: "Pop")?.play()
+        play("Tink")
     }
 
     func playNudge() {
-        NSSound(named: "Glass")?.play()
+        play("Glass")
     }
 
     func playKnock() {
-        NSSound(named: "Hero")?.play()
+        play("Purr")
+    }
+
+    func playBreak() {
+        play("Sosumi")
     }
 }

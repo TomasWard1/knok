@@ -65,6 +65,72 @@ struct AlertPayloadTests {
         #expect(payload.actions.count == 1)
         #expect(payload.ttl == 300)
     }
+
+    @Test("Encode and decode with icon and color")
+    func encodeDecodeIconColor() throws {
+        let payload = AlertPayload(
+            level: .nudge,
+            title: "Deploy",
+            icon: "bolt.fill",
+            color: "#A855F7"
+        )
+        let data = try JSONEncoder().encode(payload)
+        let decoded = try JSONDecoder().decode(AlertPayload.self, from: data)
+        #expect(decoded.icon == "bolt.fill")
+        #expect(decoded.color == "#A855F7")
+    }
+
+    @Test("Decode with all optional fields missing")
+    func decodeMinimalJSON() throws {
+        let json = """
+        {"level":"whisper","title":"Hello"}
+        """
+        let data = json.data(using: .utf8)!
+        let payload = try JSONDecoder().decode(AlertPayload.self, from: data)
+        #expect(payload.level == .whisper)
+        #expect(payload.title == "Hello")
+        #expect(payload.message == nil)
+        #expect(payload.tts == false)
+        #expect(payload.actions.isEmpty)
+        #expect(payload.ttl == 0)
+        #expect(payload.icon == nil)
+        #expect(payload.color == nil)
+    }
+
+    @Test("Roundtrip preserves all fields")
+    func roundtripAllFields() throws {
+        let payload = AlertPayload(
+            level: .break,
+            title: "Critical",
+            message: "Server down",
+            tts: true,
+            actions: [
+                AlertAction(label: "View PR", id: "view-pr", url: "https://github.com/foo/bar/pull/1", icon: "link"),
+                AlertAction(label: "Dismiss", id: "dismiss"),
+            ],
+            ttl: 120,
+            icon: "exclamationmark.triangle.fill",
+            color: "#FF6B6B"
+        )
+        let data = try JSONEncoder().encode(payload)
+        let decoded = try JSONDecoder().decode(AlertPayload.self, from: data)
+        #expect(decoded.level == .break)
+        #expect(decoded.title == "Critical")
+        #expect(decoded.message == "Server down")
+        #expect(decoded.tts == true)
+        #expect(decoded.actions.count == 2)
+        #expect(decoded.actions[0].label == "View PR")
+        #expect(decoded.actions[0].id == "view-pr")
+        #expect(decoded.actions[0].url == "https://github.com/foo/bar/pull/1")
+        #expect(decoded.actions[0].icon == "link")
+        #expect(decoded.actions[1].label == "Dismiss")
+        #expect(decoded.actions[1].id == "dismiss")
+        #expect(decoded.actions[1].url == nil)
+        #expect(decoded.actions[1].icon == nil)
+        #expect(decoded.ttl == 120)
+        #expect(decoded.icon == "exclamationmark.triangle.fill")
+        #expect(decoded.color == "#FF6B6B")
+    }
 }
 
 // Helper for flexible JSON decoding in tests
