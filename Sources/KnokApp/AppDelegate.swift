@@ -3,11 +3,19 @@ import KnokCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var socketServer: SocketServer?
-    private let alertEngine = AlertEngine()
+    let alertEngine = AlertEngine()
+    let settings = AppSettings()
+
+    @MainActor var alertHistory: AlertHistory { alertEngine.history }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Hide dock icon
         NSApp.setActivationPolicy(.accessory)
+
+        // Wire settings into alert engine
+        Task { @MainActor in
+            alertEngine.settings = settings
+        }
 
         // Ensure socket directory exists
         let socketDir = KnokConstants.socketDir
