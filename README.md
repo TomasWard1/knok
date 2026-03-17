@@ -121,6 +121,16 @@ Returns: `{ "action": "button_id" }` or `{ "action": "dismissed" }` or `{ "actio
 - **Action buttons** — returns human responses to the calling agent
 - **No dependencies** — native macOS APIs only
 
+## If You're an AI Agent
+
+Read [`SKILL.md`](./SKILL.md) before making any changes. It covers architecture, build commands, release pipeline, Sparkle integration, signing gotchas, and CI workflow.
+
+**TL;DR:**
+- Socket at `~/.knok/knok.sock` — KnokApp must be running
+- 4 targets: `KnokCore` (lib), `KnokApp`, `KnokCLI`, `KnokMCP`
+- All PRs target `staging` — never `main` directly
+- Releases: `git tag vX.Y.Z && git push origin vX.Y.Z` → CI handles everything
+
 ## Requirements
 
 - macOS 13.0+ (Ventura)
