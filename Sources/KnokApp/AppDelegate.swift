@@ -30,7 +30,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Set up menu bar status item
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
-            button.image = NSImage(systemSymbolName: "door.left.hand.open", accessibilityDescription: "Knok")
+            let menuIcon = NSImage(named: "MenuBarIcon")
+            menuIcon?.isTemplate = true
+            button.image = menuIcon
             button.action = #selector(togglePopover)
             button.target = self
         }
