@@ -39,9 +39,11 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 
 # ── 1. Swift build ────────────────────────────────────────────────────────────
 echo "==> swift build -c release"
-swift build -c release --product KnokApp
+swift build -c release --product KnokApp --product knok --product knok-mcp
 
 BINARY_SRC=".build/release/KnokApp"
+CLI_SRC=".build/release/knok"
+MCP_SRC=".build/release/knok-mcp"
 SPARKLE_FRAMEWORK_SRC=$(find .build -path "*/Sparkle.framework" -maxdepth 6 | head -1)
 
 if [ -z "$SPARKLE_FRAMEWORK_SRC" ]; then
@@ -53,6 +55,8 @@ fi
 echo "==> Assembling .app bundle"
 
 cp "$BINARY_SRC" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
+cp "$CLI_SRC" "$APP_BUNDLE/Contents/MacOS/knok"
+cp "$MCP_SRC" "$APP_BUNDLE/Contents/MacOS/knok-mcp"
 cp "Sources/KnokApp/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 
 # Patch version into bundle's Info.plist
@@ -106,6 +110,12 @@ codesign --force --options runtime --sign "$DEVELOPER_ID" --timestamp \
 # Sign Sparkle.framework (outer, no --deep since inner components are signed)
 codesign --force --options runtime --sign "$DEVELOPER_ID" --timestamp \
     "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
+
+# Sign CLI helpers
+codesign --force --options runtime --sign "$DEVELOPER_ID" --timestamp \
+    "$APP_BUNDLE/Contents/MacOS/knok"
+codesign --force --options runtime --sign "$DEVELOPER_ID" --timestamp \
+    "$APP_BUNDLE/Contents/MacOS/knok-mcp"
 
 # Sign the main binary
 codesign --force --options runtime --sign "$DEVELOPER_ID" --timestamp \
