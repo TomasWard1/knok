@@ -59,6 +59,16 @@ cp "Sources/KnokApp/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$APP_BUNDLE/Contents/Info.plist"
 
+# ── 2b. Compile asset catalog (app icon + menu bar icon) ─────────────────────
+echo "==> Compiling asset catalog"
+xcrun actool \
+    --compile "$APP_BUNDLE/Contents/Resources" \
+    --platform macosx \
+    --minimum-deployment-target 13.0 \
+    --app-icon AppIcon \
+    --output-partial-info-plist "$ARTIFACTS_DIR/assets-info.plist" \
+    "Sources/KnokApp/Assets.xcassets"
+
 # ── 3. Embed Sparkle.framework ────────────────────────────────────────────────
 echo "==> Embedding Sparkle.framework"
 cp -R "$SPARKLE_FRAMEWORK_SRC" "$APP_BUNDLE/Contents/Frameworks/"
