@@ -110,14 +110,30 @@ echo "==> Verifying signature"
 codesign --verify --deep --strict "$APP_BUNDLE"
 spctl --assess --verbose=4 "$APP_BUNDLE" || echo "Note: spctl may fail without notarization"
 
-# ── 5. Create DMG ─────────────────────────────────────────────────────────────
+# ── 5. Create DMG with drag-to-Applications layout ───────────────────────────
 echo "==> Creating DMG: $DMG_NAME"
-hdiutil create \
-    -volname "$APP_NAME" \
-    -srcfolder "$APP_BUNDLE" \
-    -ov \
-    -format UDZO \
-    "$DMG_PATH"
+
+# Install create-dmg if not present
+if ! command -v create-dmg &>/dev/null; then
+    echo "==> Installing create-dmg..."
+    brew install create-dmg
+fi
+
+# create-dmg fails if the output file exists
+rm -f "$DMG_PATH"
+
+create-dmg \
+    --volname "$APP_NAME" \
+    --window-pos 200 120 \
+    --window-size 600 400 \
+    --icon-size 80 \
+    --icon "$APP_NAME.app" 175 190 \
+    --app-drop-link 425 190 \
+    --background "scripts/dmg-background.png" \
+    --hide-extension "$APP_NAME.app" \
+    --no-internet-enable \
+    "$DMG_PATH" \
+    "$APP_BUNDLE"
 
 # ── 6. Notarize ──────────────────────────────────────────────────────────────
 echo "==> Notarizing (this may take a few minutes)..."
