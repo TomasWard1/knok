@@ -1,131 +1,202 @@
 ---
 name: knok
-description: Use when working on the Knok codebase — architecture reference, release pipeline, Sparkle integration, signing, CI workflow, and socket IPC protocol.
+description: Use when an AI agent needs to alert, notify, or interrupt the human. Covers how to connect to Knok via socket, CLI, or MCP and send notifications with the right urgency level.
 ---
 
-# Knok — Agent Reference
+# Knok — Agent Integration Guide
 
-## Architecture
+Knok gives AI agents a physical alert channel to interrupt humans on macOS. Alerts render as native windows at elevated window levels — they bypass Do Not Disturb.
 
-```
-AI agent → knok CLI / knok-mcp → KnokCore SocketServer → KnokApp (menu bar)
-```
+**Prerequisite:** Knok.app must be running (menu bar icon visible).
 
-**4 SPM targets:**
+## Quick Start
 
-| Target | Binary | Role |
-|--------|--------|------|
-| `KnokCore` | lib | Models, AlertPayload, SocketServer, constants |
-| `KnokApp` | `Knok.app` | Menu bar app, AlertEngine, Sparkle updater |
-| `KnokCLI` | `knok` | CLI for scripts/agents |
-| `KnokMCP` | `knok-mcp` | MCP stdio server |
+### Option 1: MCP Tool (Claude Code, Cursor, etc.)
 
-**Socket:** `~/.knok/knok.sock` (Unix domain)
-**Bundle ID:** `app.getknok.Knok` | **Team ID:** `2JSZ8CME85`
-**Min OS:** macOS 13 | **Swift:** 6.0 (strict concurrency)
+If `knok-mcp` is configured as an MCP server, call the `alert` tool directly:
 
-## Git Workflow
-
-```
-feat/* or fix/*  →  PR to staging  →  (CI)  →  auto-PR to main  →  auto-merge  →  deploy
+```json
+{
+  "level": "nudge",
+  "title": "Build Complete",
+  "message": "All 42 tests passed. Ready to deploy.",
+  "actions": [
+    { "label": "Deploy", "id": "deploy" },
+    { "label": "Skip", "id": "skip" }
+  ]
+}
 ```
 
-- All PRs target `staging`, never `main` directly
-- Tags (`v*`) trigger the release pipeline
-- **Never push directly to main**
+### Option 2: CLI
 
 ```bash
-# Before any push — check PR state
-gh pr list --head $(git branch --show-current) --json state,number --jq '.[0]'
+knok nudge "All 42 tests passed" \
+  --title "Build Complete" \
+  --action "Deploy:deploy" \
+  --action "Skip:skip"
 ```
 
-## Build
+### Option 3: Raw Socket
 
 ```bash
-swift build                        # all targets
-swift build --target KnokApp      # app only
-swift build -c release             # release build
-swift test                         # run tests
+echo '{"level":"nudge","title":"Build Complete","message":"All 42 tests passed","actions":[{"label":"Deploy","id":"deploy"},{"label":"Skip","id":"skip"}]}' | nc -U ~/.knok/knok.sock
 ```
 
-## Release Pipeline
+## Alert Levels
 
-Trigger: `git tag vX.Y.Z && git push origin vX.Y.Z`
+Pick the right level for your situation:
 
-CI does: swift build → assemble .app → codesign (Developer ID, hardened runtime) → notarytool → staple → DMG → EdDSA sign → commit appcast.xml to main → `gh release create`
+| Level | Use When | Behavior |
+|-------|----------|----------|
+| `whisper` | FYI, no action needed | Small toast, auto-dismisses in 5s |
+| `nudge` | Need attention but not urgent | Floating banner, stays until dismissed |
+| `knock` | Important, needs response soon | Overlay bar + sound, hard to miss |
+| `break` | Critical, stop everything | Full-screen takeover on all displays, must acknowledge |
 
-**Sparkle auto-update:** running Knok polls `appcast.xml` on main via `SUFeedURL`. CI updates it on every release.
+**Decision guide:**
+- Task finished, just informing → `whisper`
+- Need a decision, can wait → `nudge`
+- Need a decision, time-sensitive → `knock`
+- Something is broken / blocking → `break`
 
-### Local release build
+## Payload Schema
+
+```json
+{
+  "level": "whisper|nudge|knock|break",
+  "title": "string (required)",
+  "message": "string (optional — body text)",
+  "tts": false,
+  "actions": [
+    {
+      "label": "Button Text",
+      "id": "action_id",
+      "url": "https://... (optional — opens on click)",
+      "icon": "sf.symbol.name (optional)"
+    }
+  ],
+  "ttl": 0,
+  "icon": "sf.symbol.name (optional)",
+  "color": "#hex (optional)"
+}
+```
+
+Only `level` and `title` are required. Everything else has sensible defaults.
+
+### Smart Defaults
+
+When `icon` and `color` are omitted, Knok auto-detects from the title:
+- "error", "fail" → red accent, error icon
+- "build", "deploy", "pass" → green accent, success icon
+- "pr", "review" → violet accent, PR icon
+- Everything else → blue, level-appropriate icon
+
+## Response
+
+Every alert returns a JSON response when the human interacts:
+
+```json
+{ "action": "deploy" }
+```
+
+| Value | Meaning |
+|-------|---------|
+| `"{action_id}"` | Human clicked a button with that id |
+| `"dismissed"` | Human closed the alert without clicking a button |
+| `"timeout"` | TTL expired with no interaction |
+
+**CLI exit codes:** 0 = action clicked, 1 = dismissed, 2 = timeout.
+
+## Socket Protocol Details
+
+For agents connecting directly (not via CLI or MCP):
+
+- **Path:** `~/.knok/knok.sock` (Unix domain socket, SOCK_STREAM)
+- **Format:** JSON + newline delimiter (`\n`) — the newline is **required**
+- **Flow:** Connect → send JSON payload + `\n` → read JSON response + `\n` → close
+- **No authentication** — any process that can write to the socket can send alerts
+- **Max payload:** 1MB
+- **Timeout:** 300s (server-side)
+
+## Common Patterns
+
+### Ask for approval before a risky action
+```bash
+knok knock "Deploy v2.1.0 to production?" \
+  --title "Deploy Ready" \
+  --action "Approve:approve" \
+  --action "Reject:reject"
+
+if [ $? -eq 0 ]; then
+  echo "Approved"
+else
+  echo "Rejected or dismissed"
+fi
+```
+
+### Notify completion with a link
+```bash
+knok nudge "PR #42 is ready for review" \
+  --title "Pull Request" \
+  --action "Open PR:open:https://github.com/org/repo/pull/42"
+```
+
+### Critical alert with TTS
+```bash
+knok break "Server health check failed — 3 endpoints down" \
+  --title "Production Alert" \
+  --tts \
+  --icon "exclamationmark.triangle.fill" \
+  --color "#FF4444"
+```
+
+### Fire-and-forget notification
+```bash
+knok whisper "Lint passed, no issues found"
+```
+
+## Setup
+
+### MCP Server (Claude Code)
+
+Add to `~/.claude/settings.json` or `.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "knok": {
+      "command": "/usr/local/bin/knok-mcp"
+    }
+  }
+}
+```
+
+### MCP Server (Cursor)
+
+Add to `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "knok": {
+      "command": "/usr/local/bin/knok-mcp"
+    }
+  }
+}
+```
+
+### CLI
 
 ```bash
-export DEVELOPER_ID="Developer ID Application: Tomas Ward (2JSZ8CME85)"
-export APPLE_ID="your@email.com"
-export APPLE_TEAM_ID="2JSZ8CME85"
-export APPLE_APP_PASSWORD="xxxx-xxxx-xxxx-xxxx"
-export SIGN_UPDATE_PATH="/path/to/sparkle/bin/sign_update"
-
-./scripts/build-release.sh 0.1.0 1
-# Output: .artifacts/Knok.app + .artifacts/Knok-0.1.0.dmg
+# If built from source
+cp .build/release/knok /usr/local/bin/knok
 ```
 
-### Required GitHub Secrets
+## Troubleshooting
 
-| Secret | Value |
-|--------|-------|
-| `DEVELOPER_ID_CERTIFICATE` | `base64 -i cert.p12` (.p12 export from Keychain) |
-| `DEVELOPER_ID_CERTIFICATE_PASSWORD` | Export password |
-| `DEVELOPER_ID_NAME` | `Developer ID Application: Tomas Ward (2JSZ8CME85)` |
-| `APPLE_ID` | Apple Developer email |
-| `APPLE_TEAM_ID` | `2JSZ8CME85` |
-| `APPLE_APP_PASSWORD` | App-specific password (appleid.apple.com) |
-| `SPARKLE_PRIVATE_KEY` | `security find-generic-password -a ed25519 -s "https://sparkle-project.org" -w` |
-
-### Sparkle keys
-
-**Public key** (in `Sources/KnokApp/Info.plist` as `SUPublicEDKey`):
-```
-1oO20R6iw8ZX8FUNfiRWPcFqmgjRNsMsSrUbOv4sW9o=
-```
-
-**Get private key** for `SPARKLE_PRIVATE_KEY` secret:
-```bash
-security find-generic-password -a ed25519 -s "https://sparkle-project.org" -w
-```
-
-**sign_update in CI** (no keychain available):
-```bash
-echo "$SPARKLE_PRIVATE_KEY" | sign_update --ed-key-file - -p Knok-0.1.0.dmg
-```
-
-## Signing Quick Reference
-
-```bash
-codesign --verify --deep --strict Knok.app
-spctl --assess --verbose=4 Knok.app        # "accepted" after notarization
-xcrun stapler validate Knok-0.1.0.dmg
-security find-identity -v -p codesigning | grep "Developer ID Application"
-```
-
-## Common Gotchas
-
-| Symptom | Fix |
+| Problem | Fix |
 |---------|-----|
-| `main actor-isolated default value` | AppDelegate needs `@MainActor` — already applied |
-| `SPUStandardUpdaterController` in stored property | Swift 6: class needs `@MainActor` |
-| `.cer` export fails in CI | Export as `.p12` (includes private key) |
-| "Developer ID Certification Authority" in Keychain | That's Apple's CA, not your identity — create "Developer ID Application" via Xcode |
-| Sparkle shows no update | `SUFeedURL` must point to `main` branch raw URL |
-| Notarization rejected | All `codesign` calls need `--options runtime` |
-
-## Key Files
-
-| File | Purpose |
-|------|---------|
-| `Sources/KnokApp/Info.plist` | Bundle ID, version, SUFeedURL, SUPublicEDKey |
-| `appcast.xml` | Sparkle RSS feed (committed to main, CI updates on release) |
-| `scripts/build-release.sh` | Full local/CI release pipeline |
-| `scripts/update-appcast.py` | Inserts `<item>` into appcast.xml |
-| `.github/workflows/release.yml` | CI release workflow (triggered on `v*` tags) |
-| `.github/workflows/build.yml` | PR CI: build + test |
-| `.github/workflows/promote-to-main.yml` | staging → main auto-promotion |
+| `Connection refused` / socket not found | Knok.app isn't running — launch it |
+| Alert sent but nothing appears | Check menu bar for Knok icon; restart app if needed |
+| Response is `{"action":"error"}` | Invalid JSON payload — check schema above |
+| TTS doesn't work | Enable in Knok Settings → Speech tab |
