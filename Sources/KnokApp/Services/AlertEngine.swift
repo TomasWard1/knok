@@ -33,19 +33,19 @@ final class AlertEngine {
             switch payload.level {
             case .whisper:
                 if settings?.whisperSoundEnabled != false {
-                    soundManager?.playWhisper()
+                    soundManager?.play(settings?.whisperSound ?? "Tink")
                 }
             case .nudge:
                 if settings?.nudgeSoundEnabled != false {
-                    soundManager?.playNudge()
+                    soundManager?.play(settings?.nudgeSound ?? "Glass")
                 }
             case .knock:
                 if settings?.knockSoundEnabled != false {
-                    soundManager?.playKnock()
+                    soundManager?.play(settings?.knockSound ?? "Purr")
                 }
             case .break:
                 if settings?.breakSoundEnabled != false {
-                    soundManager?.playBreak()
+                    soundManager?.play(settings?.breakSound ?? "Sosumi")
                 }
             }
         }
@@ -60,6 +60,9 @@ final class AlertEngine {
             }
             ttsManager?.speak(payload.message ?? payload.title)
         }
+
+        // Pass settings to window manager
+        windowManager?.settings = settings
 
         // Show the appropriate view -- WindowManager owns the completion
         windowManager?.showAlert(payload: payload) { [weak self] response in

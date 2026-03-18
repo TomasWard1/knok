@@ -25,6 +25,7 @@ struct VisualEffectBackground: NSViewRepresentable {
 struct WhisperView: View {
     let payload: AlertPayload
     let onDismiss: () -> Void
+    @Environment(\.knokFontScale) private var scale
 
     @State private var offset: CGFloat = 20
     @State private var opacity: Double = 0
@@ -38,18 +39,18 @@ struct WhisperView: View {
                 .padding(.vertical, 4)
 
             Image(systemName: payload.resolvedIcon())
-                .font(.system(size: 16, weight: .medium))
+                .font(.system(size: 16 * scale, weight: .medium))
                 .foregroundStyle(payload.resolvedAccentColor())
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(payload.title)
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .font(.system(size: 18 * scale, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white)
                     .lineLimit(1)
 
                 if let message = payload.message {
                     Text(message)
-                        .font(.system(size: 16, design: .rounded))
+                        .font(.system(size: 16 * scale, design: .rounded))
                         .foregroundStyle(.white.opacity(0.6))
                         .lineLimit(1)
                 }
@@ -62,14 +63,12 @@ struct WhisperView: View {
         .frame(width: 320)
         .background {
             ZStack {
-                // Behind-window blur — light material for translucency
                 VisualEffectBackground(
                     material: .fullScreenUI,
                     blendingMode: .behindWindow
                 )
                 .opacity(0.6)
 
-                // Glossy white tint
                 Color.white.opacity(0.12)
             }
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -112,5 +111,4 @@ struct WhisperView: View {
             onDismiss()
         }
     }
-
 }

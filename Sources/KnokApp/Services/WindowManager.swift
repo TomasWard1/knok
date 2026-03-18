@@ -23,9 +23,16 @@ private class FirstClickHostingView<Content: View>: NSHostingView<Content> {
 final class WindowManager {
     private var activeWindows: [NSWindow] = []
     private var currentCompletion: ((AlertResponse) -> Void)?
+    var settings: AppSettings?
+
+    private var fontScale: Double { settings?.fontScale ?? 1.0 }
+    private var showInAllSpaces: Bool { settings?.showInAllSpaces ?? true }
+
+    private var spaceBehavior: NSWindow.CollectionBehavior {
+        showInAllSpaces ? [.canJoinAllSpaces, .fullScreenAuxiliary] : [.fullScreenAuxiliary]
+    }
 
     func showAlert(payload: AlertPayload, completion: @escaping (AlertResponse) -> Void) {
-        // Dismiss previous windows without calling previous completion
         for window in activeWindows {
             window.close()
         }
@@ -64,6 +71,8 @@ final class WindowManager {
         let view = WhisperView(payload: payload) { [weak self] in
             self?.complete(.dismissed)
         }
+        .knokFontScale(fontScale)
+
         let size = NSSize(width: 340, height: 90)
         let panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: size),
@@ -78,7 +87,7 @@ final class WindowManager {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.collectionBehavior = spaceBehavior
         panel.contentView = FirstClickHostingView(rootView:
             view.frame(width: size.width, height: size.height)
         )
@@ -86,8 +95,15 @@ final class WindowManager {
         panel.orderFrontRegardless()
         activeWindows.append(panel)
 
-        // Auto-dismiss whisper after 5 seconds if no TTL set
-        let ttl = payload.ttl > 0 ? payload.ttl : 5
+        // Auto-dismiss: payload TTL > settings default > 5s fallback
+        let ttl: Int
+        if payload.ttl > 0 {
+            ttl = payload.ttl
+        } else if let settingsTTL = settings?.whisperAutoDismiss, settingsTTL > 0 {
+            ttl = settingsTTL
+        } else {
+            ttl = 5
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(ttl)) { [weak self] in
             guard let self, self.activeWindows.contains(where: { $0 === panel }) else { return }
             self.complete(.timeout)
@@ -100,6 +116,7 @@ final class WindowManager {
         let view = NudgeView(payload: payload) { [weak self] response in
             self?.complete(response)
         }
+        .knokFontScale(fontScale)
 
         let width: CGFloat = 360
         let wrappedView = view.frame(width: width).fixedSize(horizontal: false, vertical: true)
@@ -121,16 +138,24 @@ final class WindowManager {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.collectionBehavior = spaceBehavior
         panel.contentView = hostingView
         positionBottomRight(panel)
         NSApp.activate(ignoringOtherApps: true)
         panel.makeKeyAndOrderFront(nil)
         activeWindows.append(panel)
 
-        // Auto-dismiss nudge after TTL if set
+        // Auto-dismiss: payload TTL > settings default > 0 (manual)
+        let ttl: Int
         if payload.ttl > 0 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(payload.ttl)) { [weak self] in
+            ttl = payload.ttl
+        } else if let settingsTTL = settings?.nudgeAutoDismiss, settingsTTL > 0 {
+            ttl = settingsTTL
+        } else {
+            ttl = 0
+        }
+        if ttl > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(ttl)) { [weak self] in
                 guard let self, self.activeWindows.contains(where: { $0 === panel }) else { return }
                 self.complete(.timeout)
             }
@@ -145,6 +170,7 @@ final class WindowManager {
         let view = KnockView(payload: payload) { [weak self] response in
             self?.complete(response)
         }
+        .knokFontScale(fontScale)
 
         let hostingView = FirstClickHostingView(rootView: view.fixedSize())
         hostingView.setFrameSize(hostingView.fittingSize)
@@ -163,10 +189,9 @@ final class WindowManager {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = false
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        panel.collectionBehavior = spaceBehavior
         panel.contentView = hostingView
 
-        // Center horizontally, top of visible area with padding
         let x = screen.visibleFrame.midX - size.width / 2
         let y = screen.visibleFrame.maxY - size.height - 12
         panel.setFrameOrigin(NSPoint(x: x, y: y))
@@ -182,6 +207,7 @@ final class WindowManager {
         let view = BreakView(payload: payload) { [weak self] response in
             self?.complete(response)
         }
+        .knokFontScale(fontScale)
 
         for screen in NSScreen.screens {
             let window = ClickableWindow(
@@ -207,7 +233,6 @@ final class WindowManager {
             activeWindows.append(window)
         }
 
-        // Activate app and make main screen window key
         NSApp.activate(ignoringOtherApps: true)
         if let mainWindow = activeWindows.last(where: { $0.screen == NSScreen.main }) {
             mainWindow.makeKeyAndOrderFront(nil)
@@ -216,49 +241,11 @@ final class WindowManager {
 
     // MARK: - Helpers
 
-    private func makePanel<V: View>(content: V, level: NSWindow.Level, size: NSSize, canActivate: Bool) -> NSPanel {
-        let styleMask: NSWindow.StyleMask = canActivate
-            ? [.titled, .closable, .fullSizeContentView]
-            : [.nonactivatingPanel, .fullSizeContentView]
-
-        let panel = ClickablePanel(
-            contentRect: NSRect(origin: .zero, size: size),
-            styleMask: styleMask,
-            backing: .buffered,
-            defer: false
-        )
-        panel.level = level
-        panel.isFloatingPanel = true
-        panel.hidesOnDeactivate = false
-        panel.isReleasedWhenClosed = false
-        panel.titlebarAppearsTransparent = true
-        panel.titleVisibility = .hidden
-        panel.isMovableByWindowBackground = true
-        panel.backgroundColor = .clear
-        panel.contentView = NSHostingView(rootView:
-            content
-                .frame(width: size.width, height: size.height)
-        )
-        return panel
-    }
-
     private func positionBottomRight(_ window: NSWindow) {
         guard let screen = NSScreen.main else { return }
         let screenFrame = screen.visibleFrame
         let x = screenFrame.maxX - window.frame.width - 16
         let y = screenFrame.minY + 16
         window.setFrameOrigin(NSPoint(x: x, y: y))
-    }
-
-    private func positionTopRight(_ window: NSWindow) {
-        guard let screen = NSScreen.main else { return }
-        let screenFrame = screen.visibleFrame
-        let x = screenFrame.maxX - window.frame.width - 16
-        let y = screenFrame.maxY - window.frame.height - 16
-        window.setFrameOrigin(NSPoint(x: x, y: y))
-    }
-
-    private func centerOnScreen(_ window: NSWindow) {
-        window.center()
     }
 }
