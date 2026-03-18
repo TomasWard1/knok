@@ -38,8 +38,14 @@ mkdir -p "$APP_BUNDLE/Contents/Frameworks"
 mkdir -p "$APP_BUNDLE/Contents/Resources"
 
 # ── 1. Swift build ────────────────────────────────────────────────────────────
-echo "==> swift build -c release"
-swift build -c release
+# Build each product separately to avoid naming collisions
+# (.build/release/Knok from package name can shadow KnokApp)
+echo "==> swift build -c release (KnokApp)"
+swift build -c release --product KnokApp
+echo "==> swift build -c release (knok CLI)"
+swift build -c release --product knok
+echo "==> swift build -c release (knok-mcp)"
+swift build -c release --product knok-mcp
 
 BINARY_SRC=".build/release/KnokApp"
 CLI_SRC=".build/release/knok"
