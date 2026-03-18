@@ -69,6 +69,12 @@ xcrun actool \
     --output-partial-info-plist "$ARTIFACTS_DIR/assets-info.plist" \
     "Sources/KnokApp/Assets.xcassets"
 
+# Copy menu bar icon PNGs directly to Resources (NSImage(named:) fallback)
+cp "Sources/KnokApp/Assets.xcassets/MenuBarIcon.imageset/menu-bar-icon.png" \
+    "$APP_BUNDLE/Contents/Resources/MenuBarIcon.png"
+cp "Sources/KnokApp/Assets.xcassets/MenuBarIcon.imageset/menu-bar-icon@2x.png" \
+    "$APP_BUNDLE/Contents/Resources/MenuBarIcon@2x.png"
+
 # ── 3. Embed Sparkle.framework ────────────────────────────────────────────────
 echo "==> Embedding Sparkle.framework"
 cp -R "$SPARKLE_FRAMEWORK_SRC" "$APP_BUNDLE/Contents/Frameworks/"
