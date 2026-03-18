@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="https://raw.githubusercontent.com/TomasWard1/knok-landing/main/public/images/og-banner.png" alt="Knok — Let your AI agent interrupt you" width="100%" />
+</p>
+
 # Knok
 
 A native macOS menu bar app that gives AI agents a physical alert channel to interrupt humans. Bypasses Do Not Disturb by using NSWindow levels instead of system notifications.
