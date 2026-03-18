@@ -299,15 +299,9 @@ Knok auto-detects icon and accent color from the alert title when not explicitly
 - Titles containing "pr" or "review" -- violet accent, pull request icon
 - Everything else -- blue with a level-appropriate icon
 
-## If You're an AI Agent
+## For AI Agents
 
-Read [`SKILL.md`](./SKILL.md) before making any changes. It covers architecture, build commands, release pipeline, Sparkle integration, signing gotchas, and CI workflow.
-
-**TL;DR:**
-- Socket at `~/.knok/knok.sock` — KnokApp must be running
-- 4 targets: `KnokCore` (lib), `KnokApp`, `KnokCLI`, `KnokMCP`
-- All PRs target `staging` — never `main` directly
-- Releases: `git tag vX.Y.Z && git push origin vX.Y.Z` → CI handles everything
+Read [`SKILL.md`](./SKILL.md) for the integration guide — how to connect to Knok and send notifications via socket, CLI, or MCP.
 
 ## Requirements
 
