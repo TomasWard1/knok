@@ -101,10 +101,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Save the updated appcast from the build
+          cp appcast.xml /tmp/appcast.xml
           git fetch origin main
           git checkout main
-          # Copy the updated appcast from our tagged commit's work
-          git checkout "${GITHUB_SHA}" -- appcast.xml
+          cp /tmp/appcast.xml appcast.xml
           git add appcast.xml
           git diff --cached --quiet || git commit -m "chore: update appcast.xml for v${VERSION} [skip ci]"
           git push origin main
