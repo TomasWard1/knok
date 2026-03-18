@@ -68,42 +68,35 @@ install_name_tool \
     -add_rpath "@executable_path/../Frameworks" \
     "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 
-# ── 4. Code sign ─────────────────────────────────────────────────────────────
+# ── 4. Code sign (inner → outer, no --deep to preserve identifiers) ──────────
 echo "==> Code signing"
 
-# Sign framework first (inner → outer)
-codesign \
-    --force \
-    --options runtime \
-    --sign "$DEVELOPER_ID" \
-    --timestamp \
-    "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app/Contents/MacOS/Updater" \
-    2>/dev/null || true
+SPARKLE_FW="$APP_BUNDLE/Contents/Frameworks/Sparkle.framework/Versions/B"
 
-codesign \
-    --force \
-    --deep \
-    --options runtime \
-    --sign "$DEVELOPER_ID" \
-    --timestamp \
+# Sign XPC services individually (preserving their bundle identifiers)
+for xpc in "$SPARKLE_FW/XPCServices/"*.xpc; do
+    echo "  Signing $(basename "$xpc")"
+    codesign --force --options runtime --sign "$DEVELOPER_ID" --timestamp "$xpc"
+done
+
+# Sign Autoupdate helper
+codesign --force --options runtime --sign "$DEVELOPER_ID" --timestamp \
+    "$SPARKLE_FW/Autoupdate"
+
+# Sign Updater.app
+codesign --force --options runtime --sign "$DEVELOPER_ID" --timestamp \
+    "$SPARKLE_FW/Updater.app"
+
+# Sign Sparkle.framework (outer, no --deep since inner components are signed)
+codesign --force --options runtime --sign "$DEVELOPER_ID" --timestamp \
     "$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
 
-# Sign the binary
-codesign \
-    --force \
-    --options runtime \
-    --sign "$DEVELOPER_ID" \
-    --timestamp \
+# Sign the main binary
+codesign --force --options runtime --sign "$DEVELOPER_ID" --timestamp \
     "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 
-# Sign the bundle
-codesign \
-    --force \
-    --deep \
-    --options runtime \
-    --sign "$DEVELOPER_ID" \
-    --timestamp \
-    --identifier "$BUNDLE_ID" \
+# Sign the app bundle (no --deep, no --identifier override)
+codesign --force --options runtime --sign "$DEVELOPER_ID" --timestamp \
     "$APP_BUNDLE"
 
 echo "==> Verifying signature"
