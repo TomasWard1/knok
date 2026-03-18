@@ -31,6 +31,9 @@ let package = Package(
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
             exclude: ["Info.plist"],
+            resources: [
+                .process("Assets.xcassets"),
+            ],
             linkerSettings: [
                 .unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist", "-Xlinker", "Sources/KnokApp/Info.plist"]),
             ]
