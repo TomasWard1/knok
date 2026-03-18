@@ -39,7 +39,7 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 
 # ── 1. Swift build ────────────────────────────────────────────────────────────
 echo "==> swift build -c release"
-swift build -c release --product KnokApp --product knok --product knok-mcp
+swift build -c release
 
 BINARY_SRC=".build/release/KnokApp"
 CLI_SRC=".build/release/knok"
