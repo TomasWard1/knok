@@ -3,5 +3,65 @@
   <channel>
     <title>Knok</title>
     <link>https://github.com/TomasWard1/knok</link>
+      <item>
+      <title>Version 0.1.6</title>
+      <pubDate>Wed, 18 Mar 2026 13:06:18 +0000</pubDate>
+      <sparkle:version>8</sparkle:version>
+      <sparkle:shortVersionString>0.1.6</sparkle:shortVersionString>
+      <enclosure
+        url="https://github.com/TomasWard1/knok/releases/download/v0.1.6/Knok-0.1.6.dmg"
+        sparkle:edSignature="cmC0pbScquGe3xqx2usMDpDhQgQsyHatJ6z5MvFvf9R1gDgPIGlRDsdR6GZJHOzImDHeSMJl4pBZcmy3QwOXAQ=="
+        length="1220540"
+        type="application/octet-stream"
+      />
+    </item>
+      <item>
+      <title>Version 0.1.7</title>
+      <pubDate>Wed, 18 Mar 2026 13:13:09 +0000</pubDate>
+      <sparkle:version>10</sparkle:version>
+      <sparkle:shortVersionString>0.1.7</sparkle:shortVersionString>
+      <enclosure
+        url="https://github.com/TomasWard1/knok/releases/download/v0.1.7/Knok-0.1.7.dmg"
+        sparkle:edSignature="4va9shOxPd/fK45szwnLisS/vy8KZq/hAUld4l8FRrbOFOszzpLp2/CS9ERUo8GFtUDfbFHGjETt8GfvkCXwDw=="
+        length="1220201"
+        type="application/octet-stream"
+      />
+    </item>
+      <item>
+      <title>Version 0.1.8</title>
+      <pubDate>Wed, 18 Mar 2026 13:22:32 +0000</pubDate>
+      <sparkle:version>13</sparkle:version>
+      <sparkle:shortVersionString>0.1.8</sparkle:shortVersionString>
+      <enclosure
+        url="https://github.com/TomasWard1/knok/releases/download/v0.1.8/Knok-0.1.8.dmg"
+        sparkle:edSignature="14hn5tppTWgHxy4zVvyauTgFdwfbPite4nDHt69ZRbF8NORDD1sb/Fx84mgq44WsQNBf1HeKYsucPSwIqJ2mBw=="
+        length="1259163"
+        type="application/octet-stream"
+      />
+    </item>
+      <item>
+      <title>Version 0.1.9</title>
+      <pubDate>Wed, 18 Mar 2026 13:28:07 +0000</pubDate>
+      <sparkle:version>14</sparkle:version>
+      <sparkle:shortVersionString>0.1.9</sparkle:shortVersionString>
+      <enclosure
+        url="https://github.com/TomasWard1/knok/releases/download/v0.1.9/Knok-0.1.9.dmg"
+        sparkle:edSignature="yngUhXwsVTrxnyfJyUH7NdIfC/eYtqe3PrDUbVbPqbvv3pcR/p/ASej2ID/9HizwHpioEr+bEw3uPgzHT98RCw=="
+        length="1259209"
+        type="application/octet-stream"
+      />
+    </item>
+      <item>
+      <title>Version 0.1.10</title>
+      <pubDate>Wed, 18 Mar 2026 13:55:05 +0000</pubDate>
+      <sparkle:version>16</sparkle:version>
+      <sparkle:shortVersionString>0.1.10</sparkle:shortVersionString>
+      <enclosure
+        url="https://github.com/TomasWard1/knok/releases/download/v0.1.10/Knok-0.1.10.dmg"
+        sparkle:edSignature="j+EClFDReEdQe56WUy8b9rY8F+/DOMzBXfuQX3XZTM0FaOEmM4awgSoGOr/g/YPgYXuyGyh2zODWklQUDw8xCA=="
+        length="1259047"
+        type="application/octet-stream"
+      />
+    </item>
   </channel>
 </rss>
