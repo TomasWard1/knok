@@ -5,6 +5,7 @@ import KnokCore
 struct NudgeView: View {
     let payload: AlertPayload
     let onAction: (AlertResponse) -> Void
+    @Environment(\.knokFontScale) private var scale
 
     @State private var offset: CGFloat = 20
     @State private var opacity: Double = 0
@@ -18,11 +19,11 @@ struct NudgeView: View {
                     .frame(width: 3, height: 24)
 
                 Image(systemName: payload.resolvedIcon())
-                    .font(.system(size: 16, weight: .medium))
+                    .font(.system(size: 16 * scale, weight: .medium))
                     .foregroundStyle(payload.resolvedAccentColor())
 
                 Text(payload.title)
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .font(.system(size: 18 * scale, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white)
                     .lineLimit(1)
 
@@ -47,7 +48,7 @@ struct NudgeView: View {
             // Message
             if let message = payload.message {
                 Text(message)
-                    .font(.system(size: 16, design: .rounded))
+                    .font(.system(size: 16 * scale, design: .rounded))
                     .foregroundStyle(.white.opacity(0.6))
                     .lineLimit(2)
                     .padding(.leading, 0)
@@ -67,10 +68,10 @@ struct NudgeView: View {
                             HStack(spacing: 5) {
                                 if let btnIcon = action.icon ?? (action.url != nil ? "arrow.up.right" : nil) {
                                     Image(systemName: btnIcon)
-                                        .font(.system(size: 10, weight: .semibold))
+                                        .font(.system(size: 10 * scale, weight: .semibold))
                                 }
                                 Text(action.label)
-                                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                                    .font(.system(size: 13 * scale, weight: .medium, design: .rounded))
                             }
                             .foregroundStyle(.white)
                             .padding(.horizontal, 18)
@@ -131,5 +132,4 @@ struct NudgeView: View {
             action()
         }
     }
-
 }

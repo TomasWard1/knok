@@ -5,17 +5,18 @@ import Sparkle
 struct MenuBarView: View {
     @ObservedObject var history: AlertHistory
     var updater: SPUUpdater?
+    var onOpenSettings: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack {
                 Text("Knok")
-                    .font(.system(.headline, design: .rounded))
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
                 Spacer()
                 if !history.items.isEmpty {
                     Text("\(history.items.count)")
-                        .font(.system(.caption2, design: .rounded).weight(.medium))
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -28,7 +29,7 @@ struct MenuBarView: View {
             // Alert list or empty state
             if history.items.isEmpty {
                 Text("No recent alerts")
-                    .font(.system(.caption, design: .rounded))
+                    .font(.system(size: 14, design: .rounded))
                     .foregroundStyle(.tertiary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 20)
@@ -51,61 +52,63 @@ struct MenuBarView: View {
             // Footer actions
             VStack(spacing: 0) {
                 if !history.items.isEmpty {
-                    Button {
+                    MenuRow("Clear History") {
                         history.clear()
-                    } label: {
-                        Text("Clear History")
-                            .font(.system(.caption, design: .rounded))
-                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
 
                     Divider()
                 }
 
-                Button {
+                MenuRow("Check for Updates...") {
                     updater?.checkForUpdates()
-                } label: {
-                    Text("Check for Updates...")
-                        .font(.system(.caption, design: .rounded))
-                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
 
                 Divider()
 
-                Button {
-                    NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-                } label: {
-                    Text("Settings...")
-                        .font(.system(.caption, design: .rounded))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                MenuRow("Settings...") {
+                    onOpenSettings?()
                 }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .keyboardShortcut(",", modifiers: .command)
 
-                Button {
+                MenuRow("Quit Knok") {
                     NSApplication.shared.terminate(nil)
-                } label: {
-                    Text("Quit Knok")
-                        .font(.system(.caption, design: .rounded))
-                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .buttonStyle(.plain)
+            }
+            .padding(.vertical, 4)
+        }
+        .frame(width: 300)
+    }
+}
+
+// MARK: - Menu Row (highlight on hover like native NSMenu)
+
+private struct MenuRow: View {
+    let title: String
+    let action: () -> Void
+    @State private var isHovered = false
+
+    init(_ title: String, action: @escaping () -> Void) {
+        self.title = title
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 14, design: .rounded))
+                .foregroundStyle(isHovered ? .white : .primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .keyboardShortcut("q", modifiers: .command)
-            }
-            .padding(.bottom, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(isHovered ? Color.accentColor : Color.clear)
+                )
         }
-        .frame(width: 260)
+        .buttonStyle(.plain)
+        .padding(.horizontal, 4)
+        .onHover { hovering in
+            isHovered = hovering
+        }
     }
 }
 
@@ -123,24 +126,24 @@ private struct AlertRow: View {
 
             // Icon
             Image(systemName: item.payload.resolvedIcon())
-                .font(.system(size: 11))
+                .font(.system(size: 14))
                 .foregroundStyle(.secondary)
-                .frame(width: 14)
+                .frame(width: 18)
 
             // Title + level
-            VStack(alignment: .leading, spacing: 1) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(item.payload.title)
-                    .font(.system(.caption, design: .rounded).weight(.medium))
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
                     .lineLimit(1)
 
                 HStack(spacing: 4) {
                     Text(item.payload.level.rawValue)
-                        .font(.system(size: 9, design: .rounded))
+                        .font(.system(size: 14, design: .rounded))
                         .foregroundStyle(.tertiary)
 
                     if let response = item.response {
-                        Text("-- \(response.action)")
-                            .font(.system(size: 9, design: .rounded))
+                        Text("· \(response.action)")
+                            .font(.system(size: 14, design: .rounded))
                             .foregroundStyle(.tertiary)
                     }
                 }
@@ -150,7 +153,7 @@ private struct AlertRow: View {
 
             // Relative timestamp
             Text(relativeTime(item.timestamp))
-                .font(.system(size: 9, design: .rounded))
+                .font(.system(size: 14, design: .rounded))
                 .foregroundStyle(.tertiary)
         }
         .padding(.horizontal, 12)

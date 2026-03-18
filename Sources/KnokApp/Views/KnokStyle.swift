@@ -1,6 +1,25 @@
 import SwiftUI
 import KnokCore
 
+// MARK: - Font Scale Environment
+
+private struct FontScaleKey: EnvironmentKey {
+    static let defaultValue: Double = 1.0
+}
+
+extension EnvironmentValues {
+    var knokFontScale: Double {
+        get { self[FontScaleKey.self] }
+        set { self[FontScaleKey.self] = newValue }
+    }
+}
+
+extension View {
+    func knokFontScale(_ scale: Double) -> some View {
+        environment(\.knokFontScale, scale)
+    }
+}
+
 // MARK: - Color Palette
 
 enum KnokColors {

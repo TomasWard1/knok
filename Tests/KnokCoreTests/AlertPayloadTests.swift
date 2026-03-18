@@ -97,6 +97,67 @@ struct AlertPayloadTests {
         #expect(payload.color == nil)
     }
 
+    // MARK: - Invalid JSON
+
+    @Test("Decode fails when level is missing")
+    func missingLevelFails() throws {
+        let json = """
+        {"title": "Oops"}
+        """
+        let data = json.data(using: .utf8)!
+        #expect(throws: DecodingError.self) {
+            _ = try JSONDecoder().decode(AlertPayload.self, from: data)
+        }
+    }
+
+    @Test("Decode fails when title is missing")
+    func missingTitleFails() throws {
+        let json = """
+        {"level": "whisper"}
+        """
+        let data = json.data(using: .utf8)!
+        #expect(throws: DecodingError.self) {
+            _ = try JSONDecoder().decode(AlertPayload.self, from: data)
+        }
+    }
+
+    @Test("Decode fails for invalid level value")
+    func invalidLevelFails() throws {
+        let json = """
+        {"level": "scream", "title": "Test"}
+        """
+        let data = json.data(using: .utf8)!
+        #expect(throws: DecodingError.self) {
+            _ = try JSONDecoder().decode(AlertPayload.self, from: data)
+        }
+    }
+
+    @Test("Decode fails for completely empty JSON object")
+    func emptyObjectFails() throws {
+        let json = "{}"
+        let data = json.data(using: .utf8)!
+        #expect(throws: DecodingError.self) {
+            _ = try JSONDecoder().decode(AlertPayload.self, from: data)
+        }
+    }
+
+    // MARK: - Init defaults
+
+    @Test("Init with defaults produces correct values")
+    func initDefaults() {
+        let payload = AlertPayload(level: .nudge, title: "Heads up")
+        #expect(payload.level == .nudge)
+        #expect(payload.title == "Heads up")
+        #expect(payload.message == nil)
+        #expect(payload.tts == false)
+        #expect(payload.actions.isEmpty)
+        #expect(payload.ttl == 0)
+        #expect(payload.icon == nil)
+        #expect(payload.color == nil)
+    }
+
+    // MARK: - Full roundtrip
+
     @Test("Roundtrip preserves all fields")
     func roundtripAllFields() throws {
         let payload = AlertPayload(
