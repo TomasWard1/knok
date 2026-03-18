@@ -51,6 +51,10 @@ jobs:
             -k "release-keychain-pw" \
             "$KEYCHAIN_PATH"
 
+      # ── 2b. Install create-dmg ────────────────────────────────────────────────
+      - name: Install create-dmg
+        run: brew install create-dmg
+
       # ── 3. Download Sparkle sign_update ─────────────────────────────────────
       - name: Download Sparkle sign_update
         run: |
