@@ -5,21 +5,92 @@ description: Use when an AI agent needs to alert, notify, or interrupt the human
 
 # Knok — Agent Integration Guide
 
-Knok gives AI agents a physical alert channel to interrupt humans on macOS. Alerts render as native windows at elevated window levels — they bypass Do Not Disturb.
+Knok gives AI agents a physical alert channel to interrupt humans on macOS. Alerts bypass Do Not Disturb.
 
 **Prerequisite:** Knok.app must be running (menu bar icon visible).
 
-## Quick Start
+## Agent Decision Tree
 
-### Option 1: MCP Tool (Claude Code, Cursor, etc.)
+### "Configure knok" / "Set up knok"
 
-If `knok-mcp` is configured as an MCP server, call the `alert` tool directly:
+1. Check if MCP is already configured:
+   - Claude Code: look for `knok` in `~/.claude/settings.json` or `.claude/settings.json` under `mcpServers`
+   - Cursor: look for `knok` in `.cursor/mcp.json` under `mcpServers`
+2. If not configured, add the MCP server entry (see [MCP Setup](#mcp-setup) below)
+3. Inform the user they need to restart the session for the MCP server to load
+
+### "Send me a notification" / "Alert me"
+
+Use this priority order — pick the first one available:
+
+1. **Socket (always works)** — fastest, no setup needed, just requires Knok.app running:
+   ```bash
+   echo '{"level":"nudge","title":"Title","message":"Body"}' | nc -U ~/.knok/knok.sock
+   ```
+2. **CLI** — if `/Applications/Knok.app/Contents/MacOS/knok` exists:
+   ```bash
+   /Applications/Knok.app/Contents/MacOS/knok nudge "Body" --title "Title"
+   ```
+3. **MCP tool** — if `knok` MCP server is configured, call the `alert` tool directly
+
+## Alert Levels
+
+| Level | When | Behavior |
+|-------|------|----------|
+| `whisper` | FYI, no action needed | Toast, auto-dismisses 5s |
+| `nudge` | Need attention, not urgent | Banner, stays until dismissed |
+| `knock` | Important, needs response | Overlay + sound |
+| `break` | Critical, stop everything | Full-screen takeover, must acknowledge |
+
+**Quick guide:** finished task → `whisper` · need decision → `nudge` · time-sensitive → `knock` · broken/blocking → `break`
+
+## Sending Alerts
+
+### Via Socket (recommended for agents)
+
+```bash
+echo '{"level":"whisper","title":"Build Done","message":"All tests passed"}' | nc -U ~/.knok/knok.sock
+```
+
+The newline at the end is **required**. `echo` adds it automatically.
+
+**With actions:**
+```bash
+echo '{"level":"nudge","title":"Deploy Ready","message":"Deploy v2.1.0 to production?","actions":[{"label":"Approve","id":"approve"},{"label":"Reject","id":"reject"}]}' | nc -U ~/.knok/knok.sock
+```
+
+### Via CLI
+
+```bash
+# Simple notification
+/Applications/Knok.app/Contents/MacOS/knok whisper "Lint passed, no issues"
+
+# With title and actions
+/Applications/Knok.app/Contents/MacOS/knok knock "Deploy v2.1.0 to production?" \
+  --title "Deploy Ready" \
+  --action "Approve:approve" \
+  --action "Reject:reject"
+
+# With link
+/Applications/Knok.app/Contents/MacOS/knok nudge "PR #42 is ready for review" \
+  --title "Pull Request" \
+  --action "Open PR:open:https://github.com/org/repo/pull/42"
+
+# Critical with TTS
+/Applications/Knok.app/Contents/MacOS/knok break "3 endpoints down" \
+  --title "Production Alert" \
+  --tts --icon "exclamationmark.triangle.fill" --color "#FF4444"
+```
+
+### Via MCP Tool
+
+If configured, call the `alert` tool with this schema:
 
 ```json
 {
   "level": "nudge",
   "title": "Build Complete",
-  "message": "All 42 tests passed. Ready to deploy.",
+  "message": "All 42 tests passed.",
   "actions": [
     { "label": "Deploy", "id": "deploy" },
     { "label": "Skip", "id": "skip" }
@@ -27,45 +98,13 @@ If `knok-mcp` is configured as an MCP server, call the `alert` tool directly:
 }
 ```
 
-### Option 2: CLI
-
-```bash
-knok nudge "All 42 tests passed" \
-  --title "Build Complete" \
-  --action "Deploy:deploy" \
-  --action "Skip:skip"
-```
-
-### Option 3: Raw Socket
-
-```bash
-echo '{"level":"nudge","title":"Build Complete","message":"All 42 tests passed","actions":[{"label":"Deploy","id":"deploy"},{"label":"Skip","id":"skip"}]}' | nc -U ~/.knok/knok.sock
-```
-
-## Alert Levels
-
-Pick the right level for your situation:
-
-| Level | Use When | Behavior |
-|-------|----------|----------|
-| `whisper` | FYI, no action needed | Small toast, auto-dismisses in 5s |
-| `nudge` | Need attention but not urgent | Floating banner, stays until dismissed |
-| `knock` | Important, needs response soon | Overlay bar + sound, hard to miss |
-| `break` | Critical, stop everything | Full-screen takeover on all displays, must acknowledge |
-
-**Decision guide:**
-- Task finished, just informing → `whisper`
-- Need a decision, can wait → `nudge`
-- Need a decision, time-sensitive → `knock`
-- Something is broken / blocking → `break`
-
 ## Payload Schema
 
 ```json
 {
   "level": "whisper|nudge|knock|break",
   "title": "string (required)",
-  "message": "string (optional — body text)",
+  "message": "string (optional)",
   "tts": false,
   "actions": [
     {
@@ -81,83 +120,34 @@ Pick the right level for your situation:
 }
 ```
 
-Only `level` and `title` are required. Everything else has sensible defaults.
-
-### Smart Defaults
-
-When `icon` and `color` are omitted, Knok auto-detects from the title:
-- "error", "fail" → red accent, error icon
-- "build", "deploy", "pass" → green accent, success icon
-- "pr", "review" → violet accent, PR icon
-- Everything else → blue, level-appropriate icon
+Only `level` and `title` are required. Smart defaults auto-detect icon/color from title keywords (error→red, build/deploy→green, pr/review→violet).
 
 ## Response
 
-Every alert returns a JSON response when the human interacts:
-
 ```json
-{ "action": "deploy" }
+{ "action": "approve" }
 ```
 
 | Value | Meaning |
 |-------|---------|
-| `"{action_id}"` | Human clicked a button with that id |
-| `"dismissed"` | Human closed the alert without clicking a button |
-| `"timeout"` | TTL expired with no interaction |
+| `"{action_id}"` | Human clicked that button |
+| `"dismissed"` | Closed without clicking |
+| `"timeout"` | TTL expired |
 
-**CLI exit codes:** 0 = action clicked, 1 = dismissed, 2 = timeout.
+**CLI exit codes:** 0 = action, 1 = dismissed, 2 = timeout.
 
-## Socket Protocol Details
+## Socket Protocol
 
-For agents connecting directly (not via CLI or MCP):
+- **Path:** `~/.knok/knok.sock` (Unix domain, SOCK_STREAM)
+- **Format:** JSON + `\n` delimiter (required)
+- **Flow:** Connect → send JSON + `\n` → read response + `\n` → close
+- **Max payload:** 1MB · **Timeout:** 300s
 
-- **Path:** `~/.knok/knok.sock` (Unix domain socket, SOCK_STREAM)
-- **Format:** JSON + newline delimiter (`\n`) — the newline is **required**
-- **Flow:** Connect → send JSON payload + `\n` → read JSON response + `\n` → close
-- **No authentication** — any process that can write to the socket can send alerts
-- **Max payload:** 1MB
-- **Timeout:** 300s (server-side)
+## MCP Setup
 
-## Common Patterns
+All binaries ship inside Knok.app — no separate install needed.
 
-### Ask for approval before a risky action
-```bash
-knok knock "Deploy v2.1.0 to production?" \
-  --title "Deploy Ready" \
-  --action "Approve:approve" \
-  --action "Reject:reject"
-
-if [ $? -eq 0 ]; then
-  echo "Approved"
-else
-  echo "Rejected or dismissed"
-fi
-```
-
-### Notify completion with a link
-```bash
-knok nudge "PR #42 is ready for review" \
-  --title "Pull Request" \
-  --action "Open PR:open:https://github.com/org/repo/pull/42"
-```
-
-### Critical alert with TTS
-```bash
-knok break "Server health check failed — 3 endpoints down" \
-  --title "Production Alert" \
-  --tts \
-  --icon "exclamationmark.triangle.fill" \
-  --color "#FF4444"
-```
-
-### Fire-and-forget notification
-```bash
-knok whisper "Lint passed, no issues found"
-```
-
-## Setup
-
-### MCP Server (Claude Code)
+### Claude Code
 
 Add to `~/.claude/settings.json` or `.claude/settings.json`:
 
@@ -165,13 +155,13 @@ Add to `~/.claude/settings.json` or `.claude/settings.json`:
 {
   "mcpServers": {
     "knok": {
-      "command": "/usr/local/bin/knok-mcp"
+      "command": "/Applications/Knok.app/Contents/MacOS/knok-mcp"
     }
   }
 }
 ```
 
-### MCP Server (Cursor)
+### Cursor
 
 Add to `.cursor/mcp.json`:
 
@@ -179,17 +169,16 @@ Add to `.cursor/mcp.json`:
 {
   "mcpServers": {
     "knok": {
-      "command": "/usr/local/bin/knok-mcp"
+      "command": "/Applications/Knok.app/Contents/MacOS/knok-mcp"
     }
   }
 }
 ```
 
-### CLI
+### CLI PATH alias (optional)
 
 ```bash
-# If built from source
-cp .build/release/knok /usr/local/bin/knok
+sudo ln -sf /Applications/Knok.app/Contents/MacOS/knok /usr/local/bin/knok
 ```
 
 ## Troubleshooting
@@ -198,5 +187,5 @@ cp .build/release/knok /usr/local/bin/knok
 |---------|-----|
 | `Connection refused` / socket not found | Knok.app isn't running — launch it |
 | Alert sent but nothing appears | Check menu bar for Knok icon; restart app if needed |
-| Response is `{"action":"error"}` | Invalid JSON payload — check schema above |
+| Response is `{"action":"error"}` | Invalid JSON — check schema above |
 | TTS doesn't work | Enable in Knok Settings → Speech tab |
