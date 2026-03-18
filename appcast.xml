@@ -3,5 +3,17 @@
   <channel>
     <title>Knok</title>
     <link>https://github.com/TomasWard1/knok</link>
+      <item>
+      <title>Version 0.1.6</title>
+      <pubDate>Wed, 18 Mar 2026 13:06:18 +0000</pubDate>
+      <sparkle:version>8</sparkle:version>
+      <sparkle:shortVersionString>0.1.6</sparkle:shortVersionString>
+      <enclosure
+        url="https://github.com/TomasWard1/knok/releases/download/v0.1.6/Knok-0.1.6.dmg"
+        sparkle:edSignature="cmC0pbScquGe3xqx2usMDpDhQgQsyHatJ6z5MvFvf9R1gDgPIGlRDsdR6GZJHOzImDHeSMJl4pBZcmy3QwOXAQ=="
+        length="1220540"
+        type="application/octet-stream"
+      />
+    </item>
   </channel>
 </rss>
