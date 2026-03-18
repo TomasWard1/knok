@@ -18,6 +18,8 @@
     <true/>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>SUFeedURL</key>
