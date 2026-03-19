@@ -9,7 +9,7 @@ let package = Package(
     ],
     products: [
         .library(name: "KnokCore", targets: ["KnokCore"]),
-        .executable(name: "knok", targets: ["KnokCLI"]),
+        .executable(name: "knok-cli", targets: ["KnokCLI"]),
         .executable(name: "knok-mcp", targets: ["KnokMCP"]),
     ],
     dependencies: [
