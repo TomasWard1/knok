@@ -18,7 +18,7 @@ final class AppSettings: ObservableObject {
     // MARK: - TTS
     @AppStorage("ttsEnabled") var ttsEnabled: Bool = true
     @AppStorage("ttsVoice") var ttsVoice: String = ""
-    @AppStorage("ttsRate") var ttsRate: Double = 0.5
+    @AppStorage("ttsRate") var ttsRate: Double = 0.35
 
     // MARK: - Appearance
     @AppStorage("fontScale") var fontScale: Double = 1.0  // 0.85 small, 1.0 medium, 1.15 large

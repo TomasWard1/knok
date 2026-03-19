@@ -28,21 +28,6 @@ struct NudgeView: View {
                     .lineLimit(1)
 
                 Spacer(minLength: 0)
-
-                Button {
-                    dismissWithAnimation { onAction(.dismissed) }
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.white.opacity(0.35))
-                        .frame(width: 20, height: 20)
-                        .background(.white.opacity(0.08))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .onHover { inside in
-                    if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                }
             }
 
             // Message
@@ -50,14 +35,29 @@ struct NudgeView: View {
                 Text(message)
                     .font(.system(size: 16 * scale, design: .rounded))
                     .foregroundStyle(.white.opacity(0.6))
-                    .lineLimit(2)
+                    .lineLimit(4)
                     .padding(.leading, 0)
             }
 
-            // Action buttons
-            if !payload.actions.isEmpty {
+            // Action buttons or dismiss
+            if payload.actions.isEmpty {
+                Button {
+                    dismissWithAnimation { onAction(.dismissed) }
+                } label: {
+                    Text("Dismiss")
+                        .font(.system(size: 13 * scale, weight: .medium, design: .rounded))
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                        .background(.white.opacity(0.15))
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .onHover { inside in
+                    if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
+            } else {
                 HStack(spacing: 8) {
-                    Spacer()
                     ForEach(payload.actions, id: \.id) { action in
                         Button {
                             if let urlString = action.url, let url = URL(string: urlString) {
@@ -72,10 +72,14 @@ struct NudgeView: View {
                                 }
                                 Text(action.label)
                                     .font(.system(size: 13 * scale, weight: .medium, design: .rounded))
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.center)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 18)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                             .padding(.vertical, 9)
+                            .padding(.horizontal, 8)
                             .background(payload.resolvedAccentColor().opacity(0.7))
                             .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                         }

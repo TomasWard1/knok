@@ -46,21 +46,20 @@ struct WhisperView: View {
                 Text(payload.title)
                     .font(.system(size: 18 * scale, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 if let message = payload.message {
                     Text(message)
                         .font(.system(size: 16 * scale, design: .rounded))
                         .foregroundStyle(.white.opacity(0.6))
-                        .lineLimit(1)
+                        .lineLimit(4)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
-        .frame(width: 320)
         .background {
             ZStack {
                 VisualEffectBackground(
