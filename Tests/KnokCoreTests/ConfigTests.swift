@@ -101,17 +101,26 @@ struct KnokConfigTests {
 @Suite("ConfigManager Tests")
 struct ConfigManagerTests {
 
+    private func makeTempConfig() -> (path: String, dir: URL) {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let path = dir.appendingPathComponent("config.json").path
+        return (path, dir)
+    }
+
     @Test("ConfigManager loads or creates config")
     func loadsConfig() {
-        let manager = ConfigManager()
+        let tmp = makeTempConfig()
+        let manager = ConfigManager(configPath: tmp.path, configDir: tmp.dir)
         let config = manager.config
         #expect(config.httpServer.token.hasPrefix("knk_"))
         #expect(config.httpServer.port == 9999 || config.httpServer.port > 0)
+        try? FileManager.default.removeItem(at: tmp.dir)
     }
 
     @Test("ConfigManager update mutates config")
     func updateMutates() {
-        let manager = ConfigManager()
+        let tmp = makeTempConfig()
+        let manager = ConfigManager(configPath: tmp.path, configDir: tmp.dir)
         let originalToken = manager.config.httpServer.token
 
         manager.update { config in
@@ -120,16 +129,13 @@ struct ConfigManagerTests {
 
         #expect(manager.config.httpServer.port == 7777)
         #expect(manager.config.httpServer.token == originalToken)
-
-        // Restore
-        manager.update { config in
-            config.httpServer.port = KnokConstants.defaultHTTPPort
-        }
+        try? FileManager.default.removeItem(at: tmp.dir)
     }
 
     @Test("ConfigManager persists to disk")
     func persistsToDisk() throws {
-        let manager = ConfigManager()
+        let tmp = makeTempConfig()
+        let manager = ConfigManager(configPath: tmp.path, configDir: tmp.dir)
         let testToken = "knk_testpersist000000000000000000"
 
         manager.update { config in
@@ -137,13 +143,9 @@ struct ConfigManagerTests {
         }
 
         // Read file directly
-        let data = try #require(FileManager.default.contents(atPath: KnokConstants.configPath))
+        let data = try #require(FileManager.default.contents(atPath: tmp.path))
         let diskConfig = try JSONDecoder().decode(KnokConfig.self, from: data)
         #expect(diskConfig.httpServer.token == testToken)
-
-        // Restore original token
-        manager.update { config in
-            config.httpServer.token = HTTPServerConfig.generateToken()
-        }
+        try? FileManager.default.removeItem(at: tmp.dir)
     }
 }

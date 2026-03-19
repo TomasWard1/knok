@@ -40,6 +40,8 @@ public struct HTTPServerConfig: Codable, Sendable {
 public final class ConfigManager: @unchecked Sendable {
     private var _config: KnokConfig
     private let lock = NSLock()
+    private let configPath: String
+    private let configDir: URL
 
     public var config: KnokConfig {
         lock.lock()
@@ -47,8 +49,10 @@ public final class ConfigManager: @unchecked Sendable {
         return _config
     }
 
-    public init() {
-        _config = Self.load()
+    public init(configPath: String = KnokConstants.configPath, configDir: URL = KnokConstants.socketDir) {
+        self.configPath = configPath
+        self.configDir = configDir
+        _config = Self.load(from: configPath, dir: configDir)
     }
 
     public func update(_ transform: (inout KnokConfig) -> Void) {
@@ -56,28 +60,27 @@ public final class ConfigManager: @unchecked Sendable {
         transform(&_config)
         let snapshot = _config
         lock.unlock()
-        Self.save(snapshot)
+        Self.save(snapshot, to: configPath, dir: configDir)
     }
 
     // MARK: - File I/O
 
-    private static func load() -> KnokConfig {
-        let path = KnokConstants.configPath
+    private static func load(from path: String, dir: URL) -> KnokConfig {
         guard FileManager.default.fileExists(atPath: path),
               let data = FileManager.default.contents(atPath: path),
               let config = try? JSONDecoder().decode(KnokConfig.self, from: data) else {
             let config = KnokConfig()
-            save(config)
+            save(config, to: path, dir: dir)
             return config
         }
         return config
     }
 
-    private static func save(_ config: KnokConfig) {
+    private static func save(_ config: KnokConfig, to path: String, dir: URL) {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let data = try? encoder.encode(config) else { return }
-        try? FileManager.default.createDirectory(at: KnokConstants.socketDir, withIntermediateDirectories: true)
-        FileManager.default.createFile(atPath: KnokConstants.configPath, contents: data)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: path, contents: data)
     }
 }
