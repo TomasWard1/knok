@@ -1,8 +1,20 @@
 import SwiftUI
 import AppKit
+import KnokCore
 
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
+    let configManager: ConfigManager
+    var onHTTPRestart: () -> Void = {}
+
+    @State private var httpEnabled: Bool = true
+    @State private var httpPort: String = "9999"
+    @State private var httpToken: String = ""
+    @State private var httpAuthRequired: Bool = true
+    @State private var tokenRevealed: Bool = false
+    @State private var showRegenerateConfirm: Bool = false
+    @State private var showAuthWarning: Bool = false
+    @State private var tokenCopied: Bool = false
 
     var body: some View {
         TabView {
@@ -14,11 +26,14 @@ struct SettingsView: View {
                 .tabItem { Label("Appearance", systemImage: "paintbrush") }
             behaviorTab
                 .tabItem { Label("Behavior", systemImage: "gearshape") }
+            networkTab
+                .tabItem { Label("Network", systemImage: "network") }
             aboutTab
                 .tabItem { Label("About", systemImage: "info.circle") }
         }
         .frame(width: 450, height: 380)
         .padding(.top, 8)
+        .onAppear { loadHTTPConfig() }
     }
 
     // MARK: - Sounds Tab
@@ -176,6 +191,128 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    // MARK: - Network Tab
+
+    private var networkTab: some View {
+        Form {
+            Toggle("Enable HTTP server", isOn: $httpEnabled)
+                .onChange(of: httpEnabled) { _ in
+                    saveHTTPConfig()
+                    onHTTPRestart()
+                }
+
+            if httpEnabled {
+                Section("Server") {
+                    HStack {
+                        Text("Port")
+                        Spacer()
+                        TextField("", text: $httpPort)
+                            .frame(width: 80)
+                            .multilineTextAlignment(.trailing)
+                            .onSubmit {
+                                saveHTTPConfig()
+                                onHTTPRestart()
+                            }
+                    }
+                }
+
+                Section("Authentication") {
+                    Toggle("Require auth token", isOn: $httpAuthRequired)
+                        .onChange(of: httpAuthRequired) { newValue in
+                            if !newValue {
+                                showAuthWarning = true
+                            } else {
+                                saveHTTPConfig()
+                            }
+                        }
+
+                    if httpAuthRequired {
+                        HStack {
+                            Text("Token")
+                            Spacer()
+                            Text(tokenRevealed ? httpToken : maskedToken)
+                                .font(.system(.body, design: .monospaced))
+                                .textSelection(.enabled)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+
+                        HStack {
+                            Button {
+                                tokenRevealed.toggle()
+                            } label: {
+                                Label(tokenRevealed ? "Hide" : "Reveal", systemImage: tokenRevealed ? "eye.slash" : "eye")
+                            }
+
+                            Button {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(httpToken, forType: .string)
+                                tokenCopied = true
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                    tokenCopied = false
+                                }
+                            } label: {
+                                Label(tokenCopied ? "Copied!" : "Copy", systemImage: tokenCopied ? "checkmark" : "doc.on.doc")
+                            }
+
+                            Spacer()
+
+                            Button("Regenerate") {
+                                showRegenerateConfirm = true
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .alert("Regenerate Token?", isPresented: $showRegenerateConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Regenerate", role: .destructive) {
+                configManager.update { config in
+                    config.httpServer.token = HTTPServerConfig.generateToken()
+                }
+                loadHTTPConfig()
+            }
+        } message: {
+            Text("Any agents using the current token will need to be updated.")
+        }
+        .alert("Disable Authentication?", isPresented: $showAuthWarning) {
+            Button("Cancel", role: .cancel) {
+                httpAuthRequired = true
+            }
+            Button("Disable", role: .destructive) {
+                saveHTTPConfig()
+            }
+        } message: {
+            Text("Without authentication, anyone on your network can send alerts to Knok. Only disable this if you trust your network.")
+        }
+    }
+
+    private var maskedToken: String {
+        guard httpToken.count > 8 else { return String(repeating: "*", count: httpToken.count) }
+        let prefix = String(httpToken.prefix(4))
+        let suffix = String(httpToken.suffix(4))
+        return prefix + String(repeating: "*", count: httpToken.count - 8) + suffix
+    }
+
+    private func loadHTTPConfig() {
+        let config = configManager.config
+        httpEnabled = config.httpServer.enabled
+        httpPort = String(config.httpServer.port)
+        httpToken = config.httpServer.token
+        httpAuthRequired = config.httpServer.authRequired
+    }
+
+    private func saveHTTPConfig() {
+        let port = UInt16(httpPort) ?? KnokConstants.defaultHTTPPort
+        configManager.update { config in
+            config.httpServer.enabled = httpEnabled
+            config.httpServer.port = port
+            config.httpServer.authRequired = httpAuthRequired
+        }
     }
 
     // MARK: - About Tab

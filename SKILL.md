@@ -24,15 +24,22 @@ Knok gives AI agents a physical alert channel to interrupt humans on macOS. Aler
 
 Use this priority order — pick the first one available:
 
-1. **Socket (always works)** — fastest, no setup needed, just requires Knok.app running:
+1. **Socket (always works locally)** — fastest, no setup needed, just requires Knok.app running:
    ```bash
    echo '{"level":"nudge","title":"Title","message":"Body"}' | nc -U ~/.knok/knok.sock
    ```
-2. **CLI** — if `/Applications/Knok.app/Contents/MacOS/knok-cli` exists:
+2. **HTTP (remote agents)** — works over the network (VPS, CI/CD, cloud agents):
+   ```bash
+   curl -X POST http://<host>:9999/alert \
+     -H "Authorization: Bearer <token>" \
+     -H "Content-Type: application/json" \
+     -d '{"level":"nudge","title":"Title","message":"Body"}'
+   ```
+3. **CLI** — if `/Applications/Knok.app/Contents/MacOS/knok-cli` exists:
    ```bash
    /Applications/Knok.app/Contents/MacOS/knok-cli nudge "Body" --title "Title"
    ```
-3. **MCP tool** — if `knok` MCP server is configured, call the `alert` tool directly
+4. **MCP tool** — if `knok` MCP server is configured, call the `alert` tool directly
 
 ## Alert Levels
 
@@ -59,6 +66,32 @@ The newline at the end is **required**. `echo` adds it automatically.
 ```bash
 echo '{"level":"nudge","title":"Deploy Ready","message":"Deploy v2.1.0 to production?","actions":[{"label":"Approve","id":"approve"},{"label":"Reject","id":"reject"}]}' | nc -U ~/.knok/knok.sock
 ```
+
+### Via HTTP (recommended for remote agents)
+
+```bash
+# Simple notification
+curl -X POST http://192.168.1.50:9999/alert \
+  -H "Authorization: Bearer knk_yourtoken" \
+  -H "Content-Type: application/json" \
+  -d '{"level":"whisper","title":"Build Done","message":"All tests passed"}'
+
+# With actions (waits for response)
+curl -X POST http://192.168.1.50:9999/alert \
+  -H "Authorization: Bearer knk_yourtoken" \
+  -H "Content-Type: application/json" \
+  -d '{"level":"nudge","title":"Deploy Ready","message":"Deploy v2.1.0?","actions":[{"label":"Approve","id":"approve"},{"label":"Reject","id":"reject"}]}'
+```
+
+**Setup:**
+1. Open Knok Settings → Network tab
+2. Copy the auth token
+3. The HTTP server runs on port 9999 by default (configurable)
+4. Use the host machine's IP or Tailscale hostname
+
+**Auth:** Every request needs `Authorization: Bearer <token>` header. Get the token from Knok Settings → Network tab, or from `~/.knok/config.json`.
+
+**Errors:** `401` = bad/missing token · `400` = bad JSON · `405` = not POST
 
 ### Via CLI
 
@@ -144,6 +177,27 @@ Only `level` and `title` are required. Smart defaults auto-detect icon/color fro
 - **Flow:** Connect → send JSON + `\n` → read response + `\n` → close
 - **Max payload:** 1MB · **Timeout:** 300s
 
+## HTTP Protocol
+
+- **Endpoint:** `POST /alert` on port 9999 (configurable in `~/.knok/config.json`)
+- **Bind:** `0.0.0.0` (all interfaces)
+- **Auth:** `Authorization: Bearer <token>` header (token from `~/.knok/config.json`)
+- **Request:** `Content-Type: application/json` — same payload schema as socket
+- **Response:** JSON `{"action":"..."}` with HTTP status 200
+- **Errors:** 401 (bad token) · 400 (bad JSON) · 405 (wrong method) · 404 (wrong path)
+- **Config file:** `~/.knok/config.json`
+
+```json
+{
+  "httpServer": {
+    "enabled": true,
+    "port": 9999,
+    "authRequired": true,
+    "token": "knk_..."
+  }
+}
+```
+
 ## MCP Setup
 
 All binaries ship inside Knok.app — no separate install needed.
@@ -199,3 +253,6 @@ sudo ln -sf /Applications/Knok.app/Contents/MacOS/knok-cli /usr/local/bin/knok
 | Alert sent but nothing appears | Check menu bar for Knok icon; restart app if needed |
 | Response is `{"action":"error"}` | Invalid JSON — check schema above |
 | TTS doesn't work | Enable in Knok Settings → Speech tab |
+| HTTP `401 Unauthorized` | Check token matches `~/.knok/config.json` or Knok Settings → Network |
+| HTTP `Connection refused` on remote | Check firewall, port 9999 open, or use Tailscale |
+| HTTP server not starting | Check Knok Settings → Network → "Enable HTTP server" is on |
