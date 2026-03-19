@@ -29,13 +29,13 @@ struct KnockView: View {
                 Text(payload.title)
                     .font(.system(size: 18 * scale, weight: .semibold, design: .rounded))
                     .foregroundStyle(.white)
-                    .lineLimit(1)
+                    .lineLimit(2)
 
                 if let message = payload.message {
                     Text(message)
                         .font(.system(size: 15 * scale, design: .rounded))
                         .foregroundStyle(.white.opacity(0.55))
-                        .lineLimit(1)
+                        .lineLimit(3)
                 }
             }
 
