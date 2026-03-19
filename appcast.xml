@@ -135,5 +135,17 @@
         type="application/octet-stream"
       />
     </item>
+      <item>
+      <title>Version 0.1.18</title>
+      <pubDate>Thu, 19 Mar 2026 12:03:45 +0000</pubDate>
+      <sparkle:version>29</sparkle:version>
+      <sparkle:shortVersionString>0.1.18</sparkle:shortVersionString>
+      <enclosure
+        url="https://github.com/TomasWard1/knok/releases/download/v0.1.18/Knok-0.1.18.dmg"
+        sparkle:edSignature="SkhcdSiru2Nx+BfOou8pPTVhfBg/E16loco1WfvXKHFLCCOpC/g5D53ifhhRcYDXHz4A+TdRpquCPIAmKPxJBA=="
+        length="3352076"
+        type="application/octet-stream"
+      />
+    </item>
   </channel>
 </rss>
