@@ -77,6 +77,7 @@ public final class ConfigManager: @unchecked Sendable {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let data = try? encoder.encode(config) else { return }
+        try? FileManager.default.createDirectory(at: KnokConstants.socketDir, withIntermediateDirectories: true)
         FileManager.default.createFile(atPath: KnokConstants.configPath, contents: data)
     }
 }
