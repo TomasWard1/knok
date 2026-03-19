@@ -73,7 +73,20 @@ final class WindowManager {
         }
         .knokFontScale(fontScale)
 
-        let size = NSSize(width: 340, height: 90)
+        let maxWidth: CGFloat = 340
+
+        // Pass 1: measure ideal width (unconstrained)
+        let widthProbe = NSHostingView(rootView: view.fixedSize())
+        let idealWidth = widthProbe.fittingSize.width
+        let finalWidth = min(idealWidth, maxWidth)
+
+        // Pass 2: measure height at the clamped width
+        let heightProbe = NSHostingView(rootView:
+            view.frame(width: finalWidth).fixedSize(horizontal: false, vertical: true)
+        )
+        let finalHeight = max(heightProbe.fittingSize.height, 60)
+        let size = NSSize(width: finalWidth, height: finalHeight)
+
         let panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless, .nonactivatingPanel],
