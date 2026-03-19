@@ -10,6 +10,7 @@ struct KnokApp: App {
         MenuBarExtra("Knok", image: "MenuBarIcon") {
             MenuBarView(
                 history: appDelegate.alertHistory,
+                cliInstaller: appDelegate.cliInstaller,
                 updater: appDelegate.updaterController.updater,
                 onOpenSettings: { appDelegate.openSettings() }
             )
