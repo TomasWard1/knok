@@ -171,7 +171,7 @@ The `action` field is either `"dismissed"`, `"timeout"`, or the `id` of the butt
 
 ### Claude Code
 
-Add to `~/.claude/settings.json` (global) or `.claude/settings.json` (project):
+Add to `~/.claude.json`:
 
 ```json
 {
@@ -183,21 +183,37 @@ Add to `~/.claude/settings.json` (global) or `.claude/settings.json` (project):
 }
 ```
 
-Or if using the build directory directly:
+Or if using the app bundle directly (no PATH install needed):
 
 ```json
 {
   "mcpServers": {
     "knok": {
-      "command": "/path/to/knok/.build/release/knok-mcp"
+      "command": "/Applications/Knok.app/Contents/MacOS/knok-mcp"
     }
   }
 }
 ```
 
-### Cursor
+### Codex CLI
 
-Add to `.cursor/mcp.json`:
+Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.knok]
+command = "/usr/local/bin/knok-mcp"
+```
+
+Or with the app bundle path:
+
+```toml
+[mcp_servers.knok]
+command = "/Applications/Knok.app/Contents/MacOS/knok-mcp"
+```
+
+### Windsurf
+
+Add to `~/.codeium/windsurf/mcp_config.json`:
 
 ```json
 {

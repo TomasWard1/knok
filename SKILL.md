@@ -14,8 +14,9 @@ Knok gives AI agents a physical alert channel to interrupt humans on macOS. Aler
 ### "Configure knok" / "Set up knok"
 
 1. Check if MCP is already configured:
-   - Claude Code: look for `knok` in `~/.claude/settings.json` or `.claude/settings.json` under `mcpServers`
-   - Cursor: look for `knok` in `.cursor/mcp.json` under `mcpServers`
+   - Claude Code: look for `knok` in `~/.claude.json` under `mcpServers`
+   - Codex CLI: look for `knok` in `~/.codex/config.toml` under `[mcp_servers]`
+   - Windsurf: look for `knok` in `~/.codeium/windsurf/mcp_config.json` under `mcpServers`
 2. If not configured, add the MCP server entry (see [MCP Setup](#mcp-setup) below)
 3. Inform the user they need to restart the session for the MCP server to load
 
@@ -149,7 +150,7 @@ All binaries ship inside Knok.app — no separate install needed.
 
 ### Claude Code
 
-Add to `~/.claude/settings.json` or `.claude/settings.json`:
+Add to `~/.claude.json`:
 
 ```json
 {
@@ -161,9 +162,18 @@ Add to `~/.claude/settings.json` or `.claude/settings.json`:
 }
 ```
 
-### Cursor
+### Codex CLI
 
-Add to `.cursor/mcp.json`:
+Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.knok]
+command = "/Applications/Knok.app/Contents/MacOS/knok-mcp"
+```
+
+### Windsurf
+
+Add to `~/.codeium/windsurf/mcp_config.json`:
 
 ```json
 {
