@@ -27,9 +27,9 @@ Use this priority order — pick the first one available:
    ```bash
    echo '{"level":"nudge","title":"Title","message":"Body"}' | nc -U ~/.knok/knok.sock
    ```
-2. **CLI** — if `/Applications/Knok.app/Contents/MacOS/knok` exists:
+2. **CLI** — if `/Applications/Knok.app/Contents/MacOS/knok-cli` exists:
    ```bash
-   /Applications/Knok.app/Contents/MacOS/knok nudge "Body" --title "Title"
+   /Applications/Knok.app/Contents/MacOS/knok-cli nudge "Body" --title "Title"
    ```
 3. **MCP tool** — if `knok` MCP server is configured, call the `alert` tool directly
 
@@ -63,21 +63,21 @@ echo '{"level":"nudge","title":"Deploy Ready","message":"Deploy v2.1.0 to produc
 
 ```bash
 # Simple notification
-/Applications/Knok.app/Contents/MacOS/knok whisper "Lint passed, no issues"
+/Applications/Knok.app/Contents/MacOS/knok-cli whisper "Lint passed, no issues"
 
 # With title and actions
-/Applications/Knok.app/Contents/MacOS/knok knock "Deploy v2.1.0 to production?" \
+/Applications/Knok.app/Contents/MacOS/knok-cli knock "Deploy v2.1.0 to production?" \
   --title "Deploy Ready" \
   --action "Approve:approve" \
   --action "Reject:reject"
 
 # With link
-/Applications/Knok.app/Contents/MacOS/knok nudge "PR #42 is ready for review" \
+/Applications/Knok.app/Contents/MacOS/knok-cli nudge "PR #42 is ready for review" \
   --title "Pull Request" \
   --action "Open PR:open:https://github.com/org/repo/pull/42"
 
 # Critical with TTS
-/Applications/Knok.app/Contents/MacOS/knok break "3 endpoints down" \
+/Applications/Knok.app/Contents/MacOS/knok-cli break "3 endpoints down" \
   --title "Production Alert" \
   --tts --icon "exclamationmark.triangle.fill" --color "#FF4444"
 ```
@@ -178,7 +178,7 @@ Add to `.cursor/mcp.json`:
 ### CLI PATH alias (optional)
 
 ```bash
-sudo ln -sf /Applications/Knok.app/Contents/MacOS/knok /usr/local/bin/knok
+sudo ln -sf /Applications/Knok.app/Contents/MacOS/knok-cli /usr/local/bin/knok
 ```
 
 ## Troubleshooting
