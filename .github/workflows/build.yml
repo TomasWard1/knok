@@ -19,4 +19,40 @@ jobs:
         run: swift test
 
       - name: Build release
-        run: swift build -c release
+        run: |
+          swift build -c release --product KnokApp
+          swift build -c release --product knok-cli
+          swift build -c release --product knok-mcp
+
+      - name: Verify release binaries
+        run: |
+          echo "==> Checking release binaries exist and are distinct"
+          for bin in KnokApp knok-cli knok-mcp; do
+            if [ ! -f ".build/release/$bin" ]; then
+              echo "ERROR: Missing binary: .build/release/$bin" >&2
+              exit 1
+            fi
+            if ! file ".build/release/$bin" | grep -q "Mach-O"; then
+              echo "ERROR: Not a Mach-O executable: .build/release/$bin" >&2
+              exit 1
+            fi
+          done
+
+          APP_HASH=$(shasum -a 256 .build/release/KnokApp | awk '{print $1}')
+          CLI_HASH=$(shasum -a 256 .build/release/knok-cli | awk '{print $1}')
+          MCP_HASH=$(shasum -a 256 .build/release/knok-mcp | awk '{print $1}')
+
+          if [ "$APP_HASH" = "$CLI_HASH" ]; then
+            echo "ERROR: KnokApp and knok-cli have identical hashes — binary collision!" >&2
+            exit 1
+          fi
+          if [ "$APP_HASH" = "$MCP_HASH" ]; then
+            echo "ERROR: KnokApp and knok-mcp have identical hashes — binary collision!" >&2
+            exit 1
+          fi
+          if [ "$CLI_HASH" = "$MCP_HASH" ]; then
+            echo "ERROR: knok-cli and knok-mcp have identical hashes — binary collision!" >&2
+            exit 1
+          fi
+
+          echo "All 3 binaries verified: exist, Mach-O, distinct hashes"

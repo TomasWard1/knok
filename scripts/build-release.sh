@@ -57,7 +57,7 @@ fi
 echo "==> Assembling .app bundle"
 
 cp "$BINARY_SRC" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
-cp "$CLI_SRC" "$APP_BUNDLE/Contents/MacOS/knok"
+cp "$CLI_SRC" "$APP_BUNDLE/Contents/MacOS/knok-cli"
 cp "$MCP_SRC" "$APP_BUNDLE/Contents/MacOS/knok-mcp"
 cp "Sources/KnokApp/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 
@@ -80,6 +80,42 @@ cp "Sources/KnokApp/Assets.xcassets/MenuBarIcon.imageset/menu-bar-icon.png" \
     "$APP_BUNDLE/Contents/Resources/MenuBarIcon.png"
 cp "Sources/KnokApp/Assets.xcassets/MenuBarIcon.imageset/menu-bar-icon@2x.png" \
     "$APP_BUNDLE/Contents/Resources/MenuBarIcon@2x.png"
+
+# ── 2c. Verify bundle binaries ────────────────────────────────────────────────
+echo "==> Verifying bundle binaries"
+
+EXPECTED_BINARIES=("$APP_NAME" "knok-cli" "knok-mcp")
+for bin in "${EXPECTED_BINARIES[@]}"; do
+    BIN_PATH="$APP_BUNDLE/Contents/MacOS/$bin"
+    if [ ! -f "$BIN_PATH" ]; then
+        echo "ERROR: Missing binary: $BIN_PATH" >&2
+        exit 1
+    fi
+    if ! file "$BIN_PATH" | grep -q "Mach-O"; then
+        echo "ERROR: Not a Mach-O executable: $BIN_PATH" >&2
+        exit 1
+    fi
+done
+
+# Verify no two binaries share the same hash (collision detection)
+APP_HASH=$(shasum -a 256 "$APP_BUNDLE/Contents/MacOS/$APP_NAME" | awk '{print $1}')
+CLI_HASH=$(shasum -a 256 "$APP_BUNDLE/Contents/MacOS/knok-cli" | awk '{print $1}')
+MCP_HASH=$(shasum -a 256 "$APP_BUNDLE/Contents/MacOS/knok-mcp" | awk '{print $1}')
+
+if [ "$APP_HASH" = "$CLI_HASH" ]; then
+    echo "ERROR: Knok and knok-cli have identical hashes — binary collision!" >&2
+    exit 1
+fi
+if [ "$APP_HASH" = "$MCP_HASH" ]; then
+    echo "ERROR: Knok and knok-mcp have identical hashes — binary collision!" >&2
+    exit 1
+fi
+if [ "$CLI_HASH" = "$MCP_HASH" ]; then
+    echo "ERROR: knok-cli and knok-mcp have identical hashes — binary collision!" >&2
+    exit 1
+fi
+
+echo "  All 3 binaries present, Mach-O verified, no hash collisions"
 
 # ── 3. Embed Sparkle.framework ────────────────────────────────────────────────
 echo "==> Embedding Sparkle.framework"
@@ -115,7 +151,7 @@ codesign --force --options runtime --sign "$DEVELOPER_ID" --timestamp \
 
 # Sign CLI helpers
 codesign --force --options runtime --sign "$DEVELOPER_ID" --timestamp \
-    "$APP_BUNDLE/Contents/MacOS/knok"
+    "$APP_BUNDLE/Contents/MacOS/knok-cli"
 codesign --force --options runtime --sign "$DEVELOPER_ID" --timestamp \
     "$APP_BUNDLE/Contents/MacOS/knok-mcp"
 
