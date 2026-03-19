@@ -4,6 +4,7 @@ import Sparkle
 
 struct MenuBarView: View {
     @ObservedObject var history: AlertHistory
+    @ObservedObject var cliInstaller: CLIInstaller
     var updater: SPUUpdater?
     var onOpenSettings: (() -> Void)?
 
@@ -59,6 +60,14 @@ struct MenuBarView: View {
                     Divider()
                 }
 
+                if !cliInstaller.isFullyInstalled {
+                    MenuRow("Install CLI Tools...", icon: "arrow.down.circle") {
+                        cliInstaller.install()
+                    }
+
+                    Divider()
+                }
+
                 MenuRow("Check for Updates...") {
                     updater?.checkForUpdates()
                 }
@@ -83,26 +92,34 @@ struct MenuBarView: View {
 
 private struct MenuRow: View {
     let title: String
+    let icon: String?
     let action: () -> Void
     @State private var isHovered = false
 
-    init(_ title: String, action: @escaping () -> Void) {
+    init(_ title: String, icon: String? = nil, action: @escaping () -> Void) {
         self.title = title
+        self.icon = icon
         self.action = action
     }
 
     var body: some View {
         Button(action: action) {
-            Text(title)
-                .font(.system(size: 14, design: .rounded))
-                .foregroundStyle(isHovered ? .white : .primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(isHovered ? Color.accentColor : Color.clear)
-                )
+            HStack(spacing: 6) {
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 12))
+                }
+                Text(title)
+                    .font(.system(size: 14, design: .rounded))
+            }
+            .foregroundStyle(isHovered ? .white : .primary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(isHovered ? Color.accentColor : Color.clear)
+            )
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 4)
