@@ -323,6 +323,14 @@ Knok auto-detects icon and accent color from the alert title when not explicitly
 
 Read [`SKILL.md`](./SKILL.md) for the integration guide — how to connect to Knok and send notifications via socket, CLI, or MCP.
 
+## Security
+
+**No telemetry. No analytics. No phone-home.** Knok collects zero data. Alert history lives in memory only and is never written to disk.
+
+**Localhost by default.** The HTTP server binds to `127.0.0.1` — nothing leaves your machine unless you opt in. For remote agents (VPS, cloud), set `"bindAddress": "0.0.0.0"` and use [Tailscale](https://tailscale.com) for encrypted, authenticated transport. All HTTP requests require a Bearer token.
+
+The app is code-signed, notarized by Apple, and auto-updates are verified with EdDSA signatures.
+
 ## Requirements
 
 - macOS 13.0+ (Ventura)

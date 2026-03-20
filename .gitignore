@@ -8,3 +8,12 @@ DerivedData/
 Package.resolved
 .worktrees
 /.artifacts
+
+# Security - prevent accidental commits of sensitive files
+.env
+.env.*
+*.p12
+*.pem
+*.key
+*.cer
+*.dmg

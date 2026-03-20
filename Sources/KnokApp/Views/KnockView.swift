@@ -62,7 +62,10 @@ struct KnockView: View {
                 } else {
                     ForEach(payload.actions, id: \.id) { action in
                         Button {
-                            if let urlString = action.url, let url = URL(string: urlString) {
+                            if let urlString = action.url,
+                               let url = URL(string: urlString),
+                               let scheme = url.scheme?.lowercased(),
+                               scheme == "http" || scheme == "https" {
                                 NSWorkspace.shared.open(url)
                             }
                             dismissWithAnimation { onAction(.buttonClicked(action.id)) }

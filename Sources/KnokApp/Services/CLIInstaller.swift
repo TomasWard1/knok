@@ -32,10 +32,12 @@ final class CLIInstaller: ObservableObject {
         commands.append("mkdir -p \(Self.installDir)")
 
         if !isCLIInstalled && FileManager.default.fileExists(atPath: cliSource) {
-            commands.append("ln -sf '\(cliSource)' '\(Self.cliLinkPath)'")
+            let escaped = cliSource.replacingOccurrences(of: "'", with: "'\\''")
+            commands.append("ln -sf '\(escaped)' '\(Self.cliLinkPath)'")
         }
         if !isMCPInstalled && FileManager.default.fileExists(atPath: mcpSource) {
-            commands.append("ln -sf '\(mcpSource)' '\(Self.mcpLinkPath)'")
+            let escaped = mcpSource.replacingOccurrences(of: "'", with: "'\\''")
+            commands.append("ln -sf '\(escaped)' '\(Self.mcpLinkPath)'")
         }
 
         guard !commands.isEmpty else { return }

@@ -5,19 +5,19 @@ public struct AlertPayload: Codable, Sendable {
     /// Urgency level
     public let level: AlertLevel
     /// Alert title
-    public let title: String
+    public var title: String
     /// Alert body text (optional)
-    public let message: String?
+    public var message: String?
     /// Whether to speak the message via TTS
     public let tts: Bool
     /// Action buttons for the human to respond with
-    public let actions: [AlertAction]
+    public var actions: [AlertAction]
     /// Auto-dismiss after N seconds (0 = never)
-    public let ttl: Int
+    public var ttl: Int
     /// SF Symbol name for the alert icon (auto-detected from title if nil)
     public let icon: String?
     /// Hex color for accent (e.g. "#FF6B6B"). Auto-detected from title if nil
-    public let color: String?
+    public var color: String?
 
     public init(
         level: AlertLevel,
@@ -53,5 +53,21 @@ public struct AlertPayload: Codable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case level, title, message, tts, actions, ttl, icon, color
+    }
+
+    /// Returns a copy with all fields clamped/validated to safe limits.
+    public func sanitized() -> AlertPayload {
+        var copy = self
+        copy.title = String(title.prefix(500))
+        if let msg = copy.message {
+            copy.message = String(msg.prefix(2000))
+        }
+        copy.ttl = max(0, ttl)
+        copy.actions = Array(actions.prefix(10))
+        if let c = copy.color {
+            let isValidHex = c.hasPrefix("#") && c.count == 7 && c.dropFirst().allSatisfy({ $0.isHexDigit })
+            if !isValidHex { copy.color = nil }
+        }
+        return copy
     }
 }

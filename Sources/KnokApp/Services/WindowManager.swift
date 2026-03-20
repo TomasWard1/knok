@@ -39,7 +39,7 @@ final class WindowManager {
 
     /// Show an alert at a specific level. Dismisses any existing alert at that level first.
     func showAlert(payload: AlertPayload, stackDepth: Int, completion: @escaping (AlertResponse) -> Void) {
-        // Close any existing windows at this level
+        // Close any existing windows at this level and release previous completion
         dismissLevel(payload.level)
         levelCompletions[payload.level] = completion
 
@@ -86,6 +86,11 @@ final class WindowManager {
             window.close()
         }
         stackHintWindows[level] = nil
+
+        // Release the previous completion so its waiting thread isn't leaked
+        if let previous = levelCompletions.removeValue(forKey: level) {
+            previous(.dismissed)
+        }
     }
 
     /// Update the stack hint cards behind the active alert (call when queue changes)
