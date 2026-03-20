@@ -18,7 +18,12 @@ struct KnokApp: App {
         .menuBarExtraStyle(.window)
 
         Settings {
-            SettingsView(settings: appDelegate.settings, configManager: appDelegate.configManager, onHTTPRestart: { appDelegate.restartHTTPServer() })
+            SettingsView(
+                settings: appDelegate.settings,
+                configManager: appDelegate.configManager,
+                gitHubService: appDelegate.gitHubService,
+                onHTTPRestart: { appDelegate.restartHTTPServer() }
+            )
         }
     }
 }
