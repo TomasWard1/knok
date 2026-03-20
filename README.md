@@ -327,7 +327,7 @@ Read [`SKILL.md`](./SKILL.md) for the integration guide — how to connect to Kn
 
 **No telemetry. No analytics. No phone-home.** Knok collects zero data. Alert history lives in memory only and is never written to disk.
 
-**Localhost by default.** The HTTP server binds to `127.0.0.1` — nothing leaves your machine unless you opt in. For remote agents (VPS, cloud), set `"bindAddress": "0.0.0.0"` and use [Tailscale](https://tailscale.com) for encrypted, authenticated transport. All HTTP requests require a Bearer token.
+**Localhost by default.** The HTTP server binds to `127.0.0.1` — nothing leaves your machine unless you opt in. For remote agents, set `"bindAddress"` to your [Tailscale](https://tailscale.com) IP — this exposes Knok only on your encrypted tailnet, not on local WiFi. Local CLI and MCP always work via the Unix socket.
 
 The app is code-signed, notarized by Apple, and auto-updates are verified with EdDSA signatures.
 

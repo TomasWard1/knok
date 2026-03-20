@@ -84,7 +84,7 @@ curl -X POST http://your-mac.tail12345.ts.net:9999/alert \
 ```
 
 **Setup:**
-1. Set `"bindAddress": "0.0.0.0"` in `~/.knok/config.json` (default is localhost-only)
+1. Set `"bindAddress"` to your Tailscale IP (e.g. `"100.x.x.x"`) in `~/.knok/config.json` (default is localhost-only)
 2. Open Knok Settings → Network tab, copy the auth token
 3. The HTTP server runs on port 9999 by default (configurable)
 4. Use your Tailscale hostname or IP from the remote machine
@@ -204,8 +204,8 @@ Only `level` and `title` are required. Smart defaults auto-detect icon/color fro
 By default the HTTP server only listens on localhost. To allow remote agents to connect:
 
 1. Install [Tailscale](https://tailscale.com) on both machines (recommended — zero-config VPN, encrypted, authenticated)
-2. Set `"bindAddress": "0.0.0.0"` in `~/.knok/config.json`
-3. Use your Mac's Tailscale IP (e.g. `100.x.x.x`) or MagicDNS hostname from the remote agent
+2. Set `"bindAddress"` to your Mac's Tailscale IP (e.g. `"100.x.x.x"`) in `~/.knok/config.json`. This exposes Knok only on the Tailscale network — not on local WiFi or public networks. Local CLI and MCP still work via the Unix socket.
+3. Restart Knok, then use your Mac's Tailscale IP or MagicDNS hostname from the remote agent
 
 ```bash
 # From your VPS (on the same tailnet)
