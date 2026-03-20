@@ -21,8 +21,13 @@ private class FirstClickHostingView<Content: View>: NSHostingView<Content> {
 
 @MainActor
 final class WindowManager {
-    private var activeWindows: [NSWindow] = []
-    private var currentCompletion: ((AlertResponse) -> Void)?
+    /// Windows per alert level (active alert's windows)
+    private var levelWindows: [AlertLevel: [NSWindow]] = [:]
+    /// Completion callbacks per level
+    private var levelCompletions: [AlertLevel: (AlertResponse) -> Void] = [:]
+    /// Stacked card hint windows per level (visual cards behind active)
+    private var stackHintWindows: [AlertLevel: [NSWindow]] = [:]
+
     var settings: AppSettings?
 
     private var fontScale: Double { settings?.fontScale ?? 1.0 }
@@ -32,55 +37,155 @@ final class WindowManager {
         showInAllSpaces ? [.canJoinAllSpaces, .fullScreenAuxiliary] : [.fullScreenAuxiliary]
     }
 
-    func showAlert(payload: AlertPayload, completion: @escaping (AlertResponse) -> Void) {
-        for window in activeWindows {
-            window.close()
-        }
-        activeWindows.removeAll()
-        currentCompletion = completion
+    /// Show an alert at a specific level. Dismisses any existing alert at that level first.
+    func showAlert(payload: AlertPayload, stackDepth: Int, completion: @escaping (AlertResponse) -> Void) {
+        // Close any existing windows at this level and release previous completion
+        dismissLevel(payload.level)
+        levelCompletions[payload.level] = completion
 
         switch payload.level {
         case .whisper:
-            showWhisper(payload: payload)
+            showWhisper(payload: payload, stackDepth: stackDepth)
         case .nudge:
-            showNudge(payload: payload)
+            showNudge(payload: payload, stackDepth: stackDepth)
         case .knock:
-            showKnock(payload: payload)
+            showKnock(payload: payload, stackDepth: stackDepth)
         case .break:
             showBreak(payload: payload)
         }
     }
 
-    func dismissAll() {
-        for window in activeWindows {
-            window.close()
+    /// Hide (but don't complete) a level's windows — used for priority suspension
+    func suspendLevel(_ level: AlertLevel) {
+        for window in levelWindows[level] ?? [] {
+            window.orderOut(nil)
         }
-        activeWindows.removeAll()
+        for window in stackHintWindows[level] ?? [] {
+            window.orderOut(nil)
+        }
     }
 
-    private func complete(_ response: AlertResponse) {
-        dismissAll()
-        let completion = currentCompletion
-        currentCompletion = nil
+    /// Re-show a suspended level's windows
+    func resumeLevel(_ level: AlertLevel) {
+        for window in levelWindows[level] ?? [] {
+            window.orderFrontRegardless()
+        }
+        for window in stackHintWindows[level] ?? [] {
+            window.orderFrontRegardless()
+        }
+    }
+
+    /// Dismiss a specific level's windows and fire completion
+    func dismissLevel(_ level: AlertLevel) {
+        for window in levelWindows[level] ?? [] {
+            window.close()
+        }
+        levelWindows[level] = nil
+
+        for window in stackHintWindows[level] ?? [] {
+            window.close()
+        }
+        stackHintWindows[level] = nil
+
+        // Release the previous completion so its waiting thread isn't leaked
+        if let previous = levelCompletions.removeValue(forKey: level) {
+            previous(.dismissed)
+        }
+    }
+
+    /// Update the stack hint cards behind the active alert (call when queue changes)
+    func updateStackHints(level: AlertLevel, depth: Int) {
+        // Remove existing hints
+        for window in stackHintWindows[level] ?? [] {
+            window.close()
+        }
+        stackHintWindows[level] = nil
+
+        guard depth > 0 else { return }
+        guard level != .break else { return }
+        guard let mainWindow = levelWindows[level]?.first else { return }
+
+        let hintCount = min(depth, 3)
+        var hints: [NSWindow] = []
+        let mainFrame = mainWindow.frame
+
+        for i in 1...hintCount {
+            let yOffset = CGFloat(i) * 14
+            let xInset = CGFloat(i) * 4
+
+            let hintWidth = mainFrame.width - xInset * 2
+            let hintHeight = mainFrame.height
+
+            let hintPanel = NSPanel(
+                contentRect: NSRect(origin: .zero, size: NSSize(width: hintWidth, height: hintHeight)),
+                styleMask: [.borderless, .nonactivatingPanel],
+                backing: .buffered,
+                defer: false
+            )
+            hintPanel.level = mainWindow.level
+            hintPanel.isFloatingPanel = true
+            hintPanel.hidesOnDeactivate = false
+            hintPanel.isReleasedWhenClosed = false
+            hintPanel.backgroundColor = .clear
+            hintPanel.isOpaque = false
+            hintPanel.hasShadow = false
+            hintPanel.collectionBehavior = spaceBehavior
+            hintPanel.ignoresMouseEvents = true
+
+            let hintView = NSHostingView(rootView:
+                StackHintCard(
+                    width: hintWidth,
+                    height: hintHeight,
+                    cornerRadius: 12,
+                    opacity: max(0.3, 0.7 - Double(i) * 0.15)
+                )
+            )
+            hintView.setFrameSize(NSSize(width: hintWidth, height: hintHeight))
+            hintPanel.contentView = hintView
+
+            // Position: peeking out above the active alert
+            var origin = mainFrame.origin
+            origin.x += xInset
+            origin.y += yOffset
+
+            hintPanel.setFrameOrigin(origin)
+            hintPanel.setContentSize(NSSize(width: hintWidth, height: hintHeight))
+
+            hintPanel.orderFront(nil)
+            hintPanel.order(.below, relativeTo: mainWindow.windowNumber)
+            hints.append(hintPanel)
+        }
+
+        stackHintWindows[level] = hints
+    }
+
+    func dismissAll() {
+        for level in AlertLevel.allCases {
+            dismissLevel(level)
+        }
+        levelCompletions.removeAll()
+    }
+
+    private func complete(_ response: AlertResponse, level: AlertLevel) {
+        dismissLevel(level)
+        let completion = levelCompletions.removeValue(forKey: level)
         completion?(response)
     }
 
     // MARK: - Whisper (menu bar flash)
 
-    private func showWhisper(payload: AlertPayload) {
+    private func showWhisper(payload: AlertPayload, stackDepth: Int) {
         let view = WhisperView(payload: payload) { [weak self] in
-            self?.complete(.dismissed)
+            self?.complete(.dismissed, level: .whisper)
         }
         .knokFontScale(fontScale)
 
         let maxWidth: CGFloat = 340
 
-        // Pass 1: measure ideal width (unconstrained)
         let widthProbe = NSHostingView(rootView: view.fixedSize())
         let idealWidth = widthProbe.fittingSize.width
         let finalWidth = min(idealWidth, maxWidth)
 
-        // Pass 2: measure height at the clamped width
         let heightProbe = NSHostingView(rootView:
             view.frame(width: finalWidth).fixedSize(horizontal: false, vertical: true)
         )
@@ -106,9 +211,14 @@ final class WindowManager {
         )
         positionBottomRight(panel)
         panel.orderFrontRegardless()
-        activeWindows.append(panel)
+        levelWindows[.whisper] = [panel]
 
-        // Auto-dismiss: payload TTL > settings default > 5s fallback
+        // Show stack hints
+        if stackDepth > 0 {
+            updateStackHints(level: .whisper, depth: stackDepth)
+        }
+
+        // Auto-dismiss
         let ttl: Int
         if payload.ttl > 0 {
             ttl = payload.ttl
@@ -118,16 +228,16 @@ final class WindowManager {
             ttl = 5
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(ttl)) { [weak self] in
-            guard let self, self.activeWindows.contains(where: { $0 === panel }) else { return }
-            self.complete(.timeout)
+            guard let self, self.levelWindows[.whisper]?.contains(where: { $0 === panel }) == true else { return }
+            self.complete(.timeout, level: .whisper)
         }
     }
 
     // MARK: - Nudge (floating banner)
 
-    private func showNudge(payload: AlertPayload) {
+    private func showNudge(payload: AlertPayload, stackDepth: Int) {
         let view = NudgeView(payload: payload) { [weak self] response in
-            self?.complete(response)
+            self?.complete(response, level: .nudge)
         }
         .knokFontScale(fontScale)
 
@@ -155,9 +265,14 @@ final class WindowManager {
         panel.contentView = hostingView
         positionBottomRight(panel)
         panel.orderFrontRegardless()
-        activeWindows.append(panel)
+        levelWindows[.nudge] = [panel]
 
-        // Auto-dismiss: payload TTL > settings default > 0 (manual)
+        // Show stack hints
+        if stackDepth > 0 {
+            updateStackHints(level: .nudge, depth: stackDepth)
+        }
+
+        // Auto-dismiss
         let ttl: Int
         if payload.ttl > 0 {
             ttl = payload.ttl
@@ -168,19 +283,19 @@ final class WindowManager {
         }
         if ttl > 0 {
             DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(ttl)) { [weak self] in
-                guard let self, self.activeWindows.contains(where: { $0 === panel }) else { return }
-                self.complete(.timeout)
+                guard let self, self.levelWindows[.nudge]?.contains(where: { $0 === panel }) == true else { return }
+                self.complete(.timeout, level: .nudge)
             }
         }
     }
 
     // MARK: - Knock (overlay)
 
-    private func showKnock(payload: AlertPayload) {
+    private func showKnock(payload: AlertPayload, stackDepth: Int) {
         guard let screen = NSScreen.main else { return }
 
         let view = KnockView(payload: payload) { [weak self] response in
-            self?.complete(response)
+            self?.complete(response, level: .knock)
         }
         .knokFontScale(fontScale)
 
@@ -209,14 +324,21 @@ final class WindowManager {
         panel.setFrameOrigin(NSPoint(x: x, y: y))
 
         panel.orderFrontRegardless()
-        activeWindows.append(panel)
+        levelWindows[.knock] = [panel]
+
+        // Show stack hints
+        if stackDepth > 0 {
+            updateStackHints(level: .knock, depth: stackDepth)
+        }
     }
 
     // MARK: - Break (full-screen takeover)
 
     private func showBreak(payload: AlertPayload) {
+        var windows: [NSWindow] = []
+
         let view = BreakView(payload: payload) { [weak self] response in
-            self?.complete(response)
+            self?.complete(response, level: .break)
         }
         .knokFontScale(fontScale)
 
@@ -241,11 +363,13 @@ final class WindowManager {
             }
 
             window.orderFrontRegardless()
-            activeWindows.append(window)
+            windows.append(window)
         }
 
+        levelWindows[.break] = windows
+
         NSApp.activate(ignoringOtherApps: true)
-        if let mainWindow = activeWindows.last(where: { $0.screen == NSScreen.main }) {
+        if let mainWindow = windows.last(where: { $0.screen == NSScreen.main }) {
             mainWindow.makeKeyAndOrderFront(nil)
         }
     }
@@ -258,5 +382,41 @@ final class WindowManager {
         let x = screenFrame.maxX - window.frame.width - 16
         let y = screenFrame.minY + 16
         window.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+}
+
+// MARK: - Stack Hint Card (visual indicator of queued alerts)
+
+struct StackHintCard: View {
+    let width: CGFloat
+    let height: CGFloat
+    let cornerRadius: CGFloat
+    let opacity: Double
+
+    var body: some View {
+        ZStack {
+            VisualEffectBackground(
+                material: .fullScreenUI,
+                blendingMode: .behindWindow
+            )
+            .opacity(0.6)
+
+            Color.white.opacity(0.12)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [.white.opacity(0.25), .white.opacity(0.08)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 0.5
+                )
+        )
+        .shadow(color: .black.opacity(0.4), radius: 12, y: 6)
+        .frame(width: width, height: height)
+        .opacity(opacity)
     }
 }

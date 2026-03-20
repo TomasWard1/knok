@@ -24,11 +24,11 @@ final class HTTPServer: @unchecked Sendable {
         var reuse: Int32 = 1
         setsockopt(listenFD, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
 
-        // Bind to 0.0.0.0:port
+        // Bind to configured address (default: 127.0.0.1 loopback only)
         var addr = sockaddr_in()
         addr.sin_family = sa_family_t(AF_INET)
         addr.sin_port = config.httpServer.port.bigEndian
-        addr.sin_addr.s_addr = INADDR_ANY
+        addr.sin_addr.s_addr = inet_addr(config.httpServer.bindAddress)
 
         let bindResult = withUnsafePointer(to: &addr) { ptr in
             ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
@@ -130,7 +130,7 @@ final class HTTPServer: @unchecked Sendable {
 
         // Parse body
         guard let bodyData = request.body,
-              let payload = try? JSONDecoder().decode(AlertPayload.self, from: bodyData) else {
+              let payload = try? JSONDecoder().decode(AlertPayload.self, from: bodyData).sanitized() else {
             sendResponse(fd: fd, status: 400, statusText: "Bad Request", body: errorJSON("Invalid JSON or missing required fields (level, title)"))
             return
         }
@@ -146,17 +146,9 @@ final class HTTPServer: @unchecked Sendable {
             }
         }
 
-        if payload.ttl > 0 {
-            let result = semaphore.wait(timeout: .now() + .seconds(payload.ttl))
-            if result == .timedOut {
-                response = .timeout
-                DispatchQueue.main.async {
-                    self.alertEngine.dismissCurrent()
-                }
-            }
-        } else {
-            semaphore.wait()
-        }
+        // Wait for response — TTL auto-dismiss is handled by WindowManager
+        // when the alert is actually displayed, not when it's enqueued
+        semaphore.wait()
 
         // Send response
         if let responseData = try? JSONEncoder().encode(response) {

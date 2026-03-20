@@ -27,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Ensure socket directory exists
         let socketDir = KnokConstants.socketDir
-        try? FileManager.default.createDirectory(at: socketDir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: socketDir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
 
         // Start socket server
         socketServer = SocketServer(alertEngine: alertEngine)

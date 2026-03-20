@@ -4,9 +4,22 @@ import KnokCore
 
 final class SocketServer: @unchecked Sendable {
     private let alertEngine: AlertEngine
-    private var listenFD: Int32 = -1
-    private var isRunning = false
+    private let stateLock = NSLock()
+
+    private var _listenFD: Int32 = -1
+    private var listenFD: Int32 {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return _listenFD }
+        set { stateLock.lock(); defer { stateLock.unlock() }; _listenFD = newValue }
+    }
+
+    private var _isRunning = false
+    private var isRunning: Bool {
+        get { stateLock.lock(); defer { stateLock.unlock() }; return _isRunning }
+        set { stateLock.lock(); defer { stateLock.unlock() }; _isRunning = newValue }
+    }
+
     private var acceptThread: Thread?
+    private let maxConnections = DispatchSemaphore(value: 10)
 
     init(alertEngine: AlertEngine) {
         self.alertEngine = alertEngine
@@ -14,6 +27,9 @@ final class SocketServer: @unchecked Sendable {
 
     func start() {
         // Remove stale socket
+        // Note: The unlink→bind sequence has a theoretical TOCTOU race, but it is
+        // mitigated by the socket directory (~/.knok) having 0700 permissions,
+        // preventing other users from creating files in the path between unlink and bind.
         unlink(KnokConstants.socketPath)
 
         // Create socket
@@ -41,6 +57,9 @@ final class SocketServer: @unchecked Sendable {
             close(listenFD)
             return
         }
+
+        // Restrict socket to owner-only
+        chmod(KnokConstants.socketPath, 0o600)
 
         // Listen
         guard listen(listenFD, 5) == 0 else {
@@ -80,8 +99,10 @@ final class SocketServer: @unchecked Sendable {
                 continue
             }
 
-            // Handle client on a new thread
+            // Handle client on a new thread (capped at 10 concurrent)
             Thread.detachNewThread {
+                self.maxConnections.wait()
+                defer { self.maxConnections.signal() }
                 self.handleClient(fd: clientFD)
             }
         }
@@ -90,6 +111,10 @@ final class SocketServer: @unchecked Sendable {
     private func handleClient(fd: Int32) {
         defer { close(fd) }
 
+        // Set read timeout (30s) to prevent threads hanging forever
+        var timeout = timeval(tv_sec: 30, tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+
         // Read payload
         var data = Data()
         var buffer = [UInt8](repeating: 0, count: 4096)
@@ -97,6 +122,7 @@ final class SocketServer: @unchecked Sendable {
             let bytesRead = recv(fd, &buffer, buffer.count, 0)
             if bytesRead <= 0 { return }
             data.append(contentsOf: buffer[..<bytesRead])
+            if data.count > KnokConstants.maxPayloadSize { return }
             if buffer[..<bytesRead].contains(0x0A) { break }
         }
 
@@ -104,7 +130,7 @@ final class SocketServer: @unchecked Sendable {
         if data.last == 0x0A { data.removeLast() }
 
         // Decode payload
-        guard let payload = try? JSONDecoder().decode(AlertPayload.self, from: data) else {
+        guard let payload = try? JSONDecoder().decode(AlertPayload.self, from: data).sanitized() else {
             let error = AlertResponse(action: "error")
             if let errorData = try? JSONEncoder().encode(error) {
                 var msg = errorData
@@ -127,18 +153,9 @@ final class SocketServer: @unchecked Sendable {
             }
         }
 
-        // Wait for user response (with timeout if TTL > 0)
-        if payload.ttl > 0 {
-            let result = semaphore.wait(timeout: .now() + .seconds(payload.ttl))
-            if result == .timedOut {
-                response = .timeout
-                DispatchQueue.main.async {
-                    self.alertEngine.dismissCurrent()
-                }
-            }
-        } else {
-            semaphore.wait()
-        }
+        // Wait for response — TTL auto-dismiss is handled by WindowManager
+        // when the alert is actually displayed, not when it's enqueued
+        semaphore.wait()
 
         // Send response
         if let responseData = try? JSONEncoder().encode(response) {

@@ -70,24 +70,24 @@ echo '{"level":"nudge","title":"Deploy Ready","message":"Deploy v2.1.0 to produc
 ### Via HTTP (recommended for remote agents)
 
 ```bash
-# Simple notification
-curl -X POST http://192.168.1.50:9999/alert \
+# Simple notification (use Tailscale hostname or IP)
+curl -X POST http://your-mac.tail12345.ts.net:9999/alert \
   -H "Authorization: Bearer knk_yourtoken" \
   -H "Content-Type: application/json" \
   -d '{"level":"whisper","title":"Build Done","message":"All tests passed"}'
 
 # With actions (waits for response)
-curl -X POST http://192.168.1.50:9999/alert \
+curl -X POST http://your-mac.tail12345.ts.net:9999/alert \
   -H "Authorization: Bearer knk_yourtoken" \
   -H "Content-Type: application/json" \
   -d '{"level":"nudge","title":"Deploy Ready","message":"Deploy v2.1.0?","actions":[{"label":"Approve","id":"approve"},{"label":"Reject","id":"reject"}]}'
 ```
 
 **Setup:**
-1. Open Knok Settings → Network tab
-2. Copy the auth token
+1. Set `"bindAddress"` to your Tailscale IP (e.g. `"100.x.x.x"`) in `~/.knok/config.json` (default is localhost-only)
+2. Open Knok Settings → Network tab, copy the auth token
 3. The HTTP server runs on port 9999 by default (configurable)
-4. Use the host machine's IP or Tailscale hostname
+4. Use your Tailscale hostname or IP from the remote machine
 
 **Auth:** Every request needs `Authorization: Bearer <token>` header. Get the token from Knok Settings → Network tab, or from `~/.knok/config.json`.
 
@@ -180,7 +180,7 @@ Only `level` and `title` are required. Smart defaults auto-detect icon/color fro
 ## HTTP Protocol
 
 - **Endpoint:** `POST /alert` on port 9999 (configurable in `~/.knok/config.json`)
-- **Bind:** `0.0.0.0` (all interfaces)
+- **Bind:** `127.0.0.1` by default (localhost only). Set `bindAddress` to `"0.0.0.0"` for remote access.
 - **Auth:** `Authorization: Bearer <token>` header (token from `~/.knok/config.json`)
 - **Request:** `Content-Type: application/json` — same payload schema as socket
 - **Response:** JSON `{"action":"..."}` with HTTP status 200
@@ -193,10 +193,29 @@ Only `level` and `title` are required. Smart defaults auto-detect icon/color fro
     "enabled": true,
     "port": 9999,
     "authRequired": true,
-    "token": "knk_..."
+    "token": "knk_...",
+    "bindAddress": "127.0.0.1"
   }
 }
 ```
+
+### Remote Access (VPS / Cloud Agents)
+
+By default the HTTP server only listens on localhost. To allow remote agents to connect:
+
+1. Install [Tailscale](https://tailscale.com) on both machines (recommended — zero-config VPN, encrypted, authenticated)
+2. Set `"bindAddress"` to your Mac's Tailscale IP (e.g. `"100.x.x.x"`) in `~/.knok/config.json`. This exposes Knok only on the Tailscale network — not on local WiFi or public networks. Local CLI and MCP still work via the Unix socket.
+3. Restart Knok, then use your Mac's Tailscale IP or MagicDNS hostname from the remote agent
+
+```bash
+# From your VPS (on the same tailnet)
+curl -X POST http://your-mac.tail12345.ts.net:9999/alert \
+  -H "Authorization: Bearer knk_yourtoken" \
+  -H "Content-Type: application/json" \
+  -d '{"level":"nudge","title":"Deploy Done"}'
+```
+
+**Without Tailscale:** Use SSH tunnel (`ssh -L 9999:localhost:9999 your-mac`) or Cloudflare Tunnel. Both work with `bindAddress: "127.0.0.1"` (default) since the tunnel handles remote transport.
 
 ## MCP Setup
 
@@ -254,5 +273,5 @@ sudo ln -sf /Applications/Knok.app/Contents/MacOS/knok-cli /usr/local/bin/knok
 | Response is `{"action":"error"}` | Invalid JSON — check schema above |
 | TTS doesn't work | Enable in Knok Settings → Speech tab |
 | HTTP `401 Unauthorized` | Check token matches `~/.knok/config.json` or Knok Settings → Network |
-| HTTP `Connection refused` on remote | Check firewall, port 9999 open, or use Tailscale |
+| HTTP `Connection refused` on remote | Check `bindAddress` is `"0.0.0.0"` in config, firewall allows port 9999, and use Tailscale |
 | HTTP server not starting | Check Knok Settings → Network → "Enable HTTP server" is on |

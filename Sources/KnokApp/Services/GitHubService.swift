@@ -69,7 +69,9 @@ final class GitHubService: ObservableObject {
                 self.pollInterval = TimeInterval(response.interval)
                 startPolling()
             } catch {
+                #if DEBUG
                 print("[GitHubService] Device flow error: \(error)")
+                #endif
                 isAuthenticating = false
             }
         }
@@ -144,7 +146,9 @@ final class GitHubService: ObservableObject {
 
             await fetchRepos()
         } catch {
+            #if DEBUG
             print("[GitHubService] Poll error: \(error)")
+            #endif
         }
     }
 
@@ -171,7 +175,9 @@ final class GitHubService: ObservableObject {
             }
             return data
         } catch {
+            #if DEBUG
             print("[GitHubService] API error for \(path): \(error)")
+            #endif
             return nil
         }
     }
@@ -197,7 +203,9 @@ final class GitHubService: ObservableObject {
             }
             return true
         } catch {
+            #if DEBUG
             print("[GitHubService] Refresh token error: \(error)")
+            #endif
             return false
         }
     }
@@ -292,9 +300,9 @@ final class GitHubService: ObservableObject {
     private func saveConfig() {
         guard let cfg = config else { return }
         let dir = configURL.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         if let data = try? JSONEncoder().encode(cfg) {
-            try? data.write(to: configURL)
+            FileManager.default.createFile(atPath: configURL.path, contents: data, attributes: [.posixPermissions: 0o600])
         }
     }
 }

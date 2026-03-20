@@ -60,7 +60,10 @@ struct BreakView: View {
                                 icon: action.icon ?? (action.url != nil ? "arrow.up.right" : nil),
                                 accent: accent
                             ) {
-                                if let urlString = action.url, let url = URL(string: urlString) {
+                                if let urlString = action.url,
+                                   let url = URL(string: urlString),
+                                   let scheme = url.scheme?.lowercased(),
+                                   scheme == "http" || scheme == "https" {
                                     NSWorkspace.shared.open(url)
                                 }
                                 onAction(.buttonClicked(action.id))
