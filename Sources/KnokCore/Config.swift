@@ -15,12 +15,14 @@ public struct HTTPServerConfig: Codable, Sendable {
     public var port: UInt16
     public var authRequired: Bool
     public var token: String
+    public var bindAddress: String
 
-    public init(enabled: Bool = true, port: UInt16 = KnokConstants.defaultHTTPPort, authRequired: Bool = true, token: String? = nil) {
+    public init(enabled: Bool = true, port: UInt16 = KnokConstants.defaultHTTPPort, authRequired: Bool = true, token: String? = nil, bindAddress: String = "127.0.0.1") {
         self.enabled = enabled
         self.port = port
         self.authRequired = authRequired
         self.token = token ?? Self.generateToken()
+        self.bindAddress = bindAddress
     }
 
     public static let `default` = HTTPServerConfig()
@@ -80,7 +82,7 @@ public final class ConfigManager: @unchecked Sendable {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let data = try? encoder.encode(config) else { return }
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        FileManager.default.createFile(atPath: path, contents: data)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        FileManager.default.createFile(atPath: path, contents: data, attributes: [.posixPermissions: 0o600])
     }
 }

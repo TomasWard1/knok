@@ -15,7 +15,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", exact: "0.9.0"),
-        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.4"),
+        .package(url: "https://github.com/sparkle-project/Sparkle", "2.6.4"..<"2.7.0"),
     ],
     targets: [
         // Shared library — models, protocol, socket client, constants

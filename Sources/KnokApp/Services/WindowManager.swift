@@ -37,6 +37,11 @@ final class WindowManager {
             window.close()
         }
         activeWindows.removeAll()
+
+        // Release the previous completion so its waiting thread isn't leaked
+        if let previous = currentCompletion {
+            previous(.dismissed)
+        }
         currentCompletion = completion
 
         switch payload.level {

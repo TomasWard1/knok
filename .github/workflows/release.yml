@@ -28,13 +28,14 @@ jobs:
           CERT_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE }}
           CERT_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
         run: |
+          KEYCHAIN_PW=$(openssl rand -hex 16)
           KEYCHAIN_PATH="$RUNNER_TEMP/release.keychain"
           CERT_PATH="$RUNNER_TEMP/cert.p12"
 
           echo "$CERT_BASE64" | base64 --decode > "$CERT_PATH"
-          security create-keychain -p "release-keychain-pw" "$KEYCHAIN_PATH"
+          security create-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
-          security unlock-keychain -p "release-keychain-pw" "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PW" "$KEYCHAIN_PATH"
           security import "$CERT_PATH" \
             -P "$CERT_PASSWORD" \
             -A \
@@ -46,7 +47,7 @@ jobs:
           security set-key-partition-list \
             -S apple-tool:,apple:,codesign: \
             -s \
-            -k "release-keychain-pw" \
+            -k "$KEYCHAIN_PW" \
             "$KEYCHAIN_PATH"
 
       # ── 2b. Install create-dmg ────────────────────────────────────────────────

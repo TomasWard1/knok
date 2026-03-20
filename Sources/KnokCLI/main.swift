@@ -127,5 +127,8 @@ func sendAlert(level: AlertLevel, options: AlertOptions) throws {
     } catch let error as KnokError {
         fputs("Error: \(error.localizedDescription)\n", stderr)
         throw ExitCode.failure
+    } catch {
+        fputs("Error: \(error.localizedDescription)\n", stderr)
+        throw ExitCode.failure
     }
 }
