@@ -7,8 +7,9 @@ struct QueuedAlert {
     let completion: (AlertResponse) -> Void
 }
 
-/// Per-level alert queues with priority-based suspension.
-/// Higher-priority levels (break > knock > nudge > whisper) suspend lower ones.
+/// Per-level alert queues with position-aware suspension.
+/// Break suspends everything. Nudge suspends whisper (same screen area).
+/// Knock coexists with nudge/whisper (different screen position).
 @MainActor
 final class AlertQueue {
     /// Max alerts per level queue
@@ -107,27 +108,12 @@ final class AlertQueue {
         suspended.removeAll()
     }
 
-    // MARK: - Priority
-
-    private static let priorityOrder: [AlertLevel] = [.whisper, .nudge, .knock, .break]
-
-    private static func priority(of level: AlertLevel) -> Int {
-        priorityOrder.firstIndex(of: level) ?? 0
-    }
-
-    /// The highest-priority level that currently has an active alert
-    private var highestActiveLevel: AlertLevel? {
-        AlertLevel.allCases
-            .sorted { Self.priority(of: $0) > Self.priority(of: $1) }
-            .first { active[$0] != nil }
-    }
-
     // MARK: - Internal
 
     private func activate(_ entry: QueuedAlert, for level: AlertLevel) {
         active[level] = entry
 
-        // Check priority: suspend lower levels if this is higher
+        // Check suspensions based on position-aware rules
         updateSuspensions()
 
         // If this level is itself suspended, don't show yet (it will show when resumed)
@@ -142,7 +128,7 @@ final class AlertQueue {
 
     private func dequeueNext(for level: AlertLevel) {
         guard var queue = queues[level], !queue.isEmpty else {
-            // No more alerts at this level — check if we should resume lower levels
+            // No more alerts at this level — check if we should resume suspended levels
             updateSuspensions()
             return
         }
@@ -152,41 +138,44 @@ final class AlertQueue {
         activate(next, for: level)
     }
 
+    /// Compute which levels should be suspended based on position-aware rules:
+    /// - Break: suspends everything (fullscreen takeover)
+    /// - Knock: coexists with nudge/whisper (different screen position)
+    /// - Nudge: suspends whisper (same bottom-right area)
+    /// - Whisper: doesn't suspend anything
     private func updateSuspensions() {
-        guard let highest = highestActiveLevel else {
-            // No active alerts — resume everything
-            let wasSuspended = suspended
-            suspended.removeAll()
-            for level in wasSuspended {
+        var shouldSuspend: Set<AlertLevel> = []
+
+        // Break suspends all other active levels
+        if active[.break] != nil {
+            for level in AlertLevel.allCases where level != .break {
                 if active[level] != nil {
-                    let entry = active[level]!
-                    onShow?(entry.payload, level) { [weak self] response in
-                        self?.complete(level: level, response: response)
-                    }
-                }
-            }
-            return
-        }
-
-        let highPriority = Self.priority(of: highest)
-
-        for level in AlertLevel.allCases where level != highest {
-            let levelPriority = Self.priority(of: level)
-
-            if levelPriority < highPriority && active[level] != nil {
-                if !suspended.contains(level) {
-                    suspended.insert(level)
-                    onSuspend?(level)
-                }
-            } else if suspended.contains(level) && levelPriority >= highPriority {
-                suspended.remove(level)
-                if active[level] != nil {
-                    let entry = active[level]!
-                    onShow?(entry.payload, level) { [weak self] response in
-                        self?.complete(level: level, response: response)
-                    }
+                    shouldSuspend.insert(level)
                 }
             }
         }
+
+        // Nudge suspends whisper (same screen area, nudge takes priority)
+        if active[.nudge] != nil && active[.whisper] != nil && !shouldSuspend.contains(.whisper) {
+            shouldSuspend.insert(.whisper)
+        }
+
+        // Apply changes: newly suspended
+        for level in shouldSuspend where !suspended.contains(level) {
+            suspended.insert(level)
+            onSuspend?(level)
+        }
+
+        // Apply changes: newly resumed
+        for level in suspended where !shouldSuspend.contains(level) {
+            suspended.remove(level)
+            if let entry = active[level] {
+                onShow?(entry.payload, level) { [weak self] response in
+                    self?.complete(level: level, response: response)
+                }
+            }
+        }
+
+        suspended = shouldSuspend
     }
 }
