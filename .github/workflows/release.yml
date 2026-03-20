@@ -119,7 +119,15 @@ jobs:
           git diff --cached --quiet || git commit -m "chore: update appcast.xml for v${VERSION} [skip ci]"
           git push origin main
 
-      # ── 9. Cleanup keychain ──────────────────────────────────────────────────
+      # ── 9. Sync appcast commit back to staging ─────────────────────────────
+      - name: Sync main back to staging
+        run: |
+          git fetch origin staging
+          git checkout staging
+          git merge main --no-edit
+          git push origin staging
+
+      # ── 10. Cleanup keychain ─────────────────────────────────────────────────
       - name: Cleanup keychain
         if: always()
         run: |
