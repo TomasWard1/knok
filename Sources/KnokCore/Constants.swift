@@ -12,4 +12,10 @@ public enum KnokConstants {
 
     /// Default response timeout in seconds
     public static let defaultTimeout: TimeInterval = 300
+
+    /// Config file path (~/.knok/config.json)
+    public static let configPath = socketDir.appendingPathComponent("config.json").path
+
+    /// Default HTTP server port
+    public static let defaultHTTPPort: UInt16 = 9999
 }

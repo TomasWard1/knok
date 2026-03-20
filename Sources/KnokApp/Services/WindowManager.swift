@@ -154,8 +154,7 @@ final class WindowManager {
         panel.collectionBehavior = spaceBehavior
         panel.contentView = hostingView
         positionBottomRight(panel)
-        NSApp.activate(ignoringOtherApps: true)
-        panel.makeKeyAndOrderFront(nil)
+        panel.orderFrontRegardless()
         activeWindows.append(panel)
 
         // Auto-dismiss: payload TTL > settings default > 0 (manual)
@@ -209,8 +208,7 @@ final class WindowManager {
         let y = screen.visibleFrame.maxY - size.height - 12
         panel.setFrameOrigin(NSPoint(x: x, y: y))
 
-        NSApp.activate(ignoringOtherApps: true)
-        panel.makeKeyAndOrderFront(nil)
+        panel.orderFrontRegardless()
         activeWindows.append(panel)
     }
 

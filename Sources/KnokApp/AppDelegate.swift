@@ -6,8 +6,10 @@ import Sparkle
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var socketServer: SocketServer?
+    private var httpServer: HTTPServer?
     let alertEngine = AlertEngine()
     let settings = AppSettings()
+    let configManager = ConfigManager()
     let cliInstaller = CLIInstaller()
     let updaterController = SPUStandardUpdaterController(
         startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil
@@ -28,6 +30,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Start socket server
         socketServer = SocketServer(alertEngine: alertEngine)
         socketServer?.start()
+
+        // Start HTTP server
+        httpServer = HTTPServer(alertEngine: alertEngine, configManager: configManager)
+        httpServer?.start()
+    }
+
+    func restartHTTPServer() {
+        httpServer?.restart()
     }
 
     func openSettings() {
@@ -37,7 +47,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let settingsView = SettingsView(settings: settings)
+        let settingsView = SettingsView(settings: settings, configManager: configManager, onHTTPRestart: { [weak self] in
+            self?.restartHTTPServer()
+        })
         let hostingController = NSHostingController(rootView: settingsView)
 
         let window = NSWindow(contentViewController: hostingController)
@@ -58,6 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         socketServer?.stop()
+        httpServer?.stop()
         try? FileManager.default.removeItem(atPath: KnokConstants.socketPath)
     }
 }
