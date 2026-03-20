@@ -11,11 +11,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let settings = AppSettings()
     let configManager = ConfigManager()
     let cliInstaller = CLIInstaller()
+    let gitHubService = GitHubService()
     let updaterController = SPUStandardUpdaterController(
         startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil
     )
 
     private var settingsWindow: NSWindow?
+    private var gitHubPoller: GitHubPoller?
 
     @MainActor var alertHistory: AlertHistory { alertEngine.history }
 
@@ -34,6 +36,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Start HTTP server
         httpServer = HTTPServer(alertEngine: alertEngine, configManager: configManager)
         httpServer?.start()
+
+        // Initialize GitHub integration
+        gitHubService.initialize()
+        if gitHubService.isConnected {
+            gitHubPoller = GitHubPoller(service: gitHubService, alertEngine: alertEngine)
+            gitHubPoller?.start()
+        }
     }
 
     func restartHTTPServer() {
@@ -47,15 +56,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let settingsView = SettingsView(settings: settings, configManager: configManager, onHTTPRestart: { [weak self] in
-            self?.restartHTTPServer()
-        })
+        let settingsView = SettingsView(
+            settings: settings,
+            configManager: configManager,
+            gitHubService: gitHubService,
+            onHTTPRestart: { [weak self] in
+                self?.restartHTTPServer()
+            }
+        )
         let hostingController = NSHostingController(rootView: settingsView)
 
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Knok Settings"
         window.styleMask = [.titled, .closable]
-        window.setContentSize(NSSize(width: 400, height: 500))
+        window.setContentSize(NSSize(width: 620, height: 420))
         window.center()
         window.isReleasedWhenClosed = false
         settingsWindow = window
@@ -71,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         socketServer?.stop()
         httpServer?.stop()
+        gitHubPoller?.stop()
         try? FileManager.default.removeItem(atPath: KnokConstants.socketPath)
     }
 }
