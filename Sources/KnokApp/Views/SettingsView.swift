@@ -5,6 +5,7 @@ import KnokCore
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     let configManager: ConfigManager
+    let gitHubService: GitHubService
     var onHTTPRestart: () -> Void = {}
 
     @State private var httpEnabled: Bool = true
@@ -15,23 +16,33 @@ struct SettingsView: View {
     @State private var showRegenerateConfirm: Bool = false
     @State private var showAuthWarning: Bool = false
     @State private var tokenCopied: Bool = false
+    @State private var selectedTab: Int = 0
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             soundsTab
                 .tabItem { Label("Sounds", systemImage: "speaker.wave.2") }
+                .tag(0)
             speechTab
                 .tabItem { Label("Speech", systemImage: "waveform") }
+                .tag(1)
             appearanceTab
                 .tabItem { Label("Appearance", systemImage: "paintbrush") }
+                .tag(2)
             behaviorTab
                 .tabItem { Label("Behavior", systemImage: "gearshape") }
+                .tag(3)
             networkTab
                 .tabItem { Label("Network", systemImage: "network") }
+                .tag(4)
+            GitHubSettingsView(service: gitHubService)
+                .tabItem { Label("GitHub", systemImage: "arrow.triangle.branch") }
+                .tag(5)
             aboutTab
                 .tabItem { Label("About", systemImage: "info.circle") }
+                .tag(6)
         }
-        .frame(width: 450, height: 380)
+        .frame(width: 620, height: 420)
         .padding(.top, 8)
         .onAppear { loadHTTPConfig() }
     }
