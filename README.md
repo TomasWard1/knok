@@ -2,15 +2,94 @@
   <img src="https://raw.githubusercontent.com/TomasWard1/knok-landing/main/public/images/og-banner.png" alt="Knok — Let your AI agent interrupt you" width="100%" />
 </p>
 
-# Knok
+<p align="center">
+  <a href="https://github.com/TomasWard1/knok/releases/latest"><img src="https://img.shields.io/github/v/release/TomasWard1/knok?style=flat-square&color=blue" alt="Release"></a>
+  <a href="https://github.com/TomasWard1/knok/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/TomasWard1/knok/build.yml?style=flat-square" alt="Build"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/TomasWard1/knok?style=flat-square" alt="License"></a>
+  <img src="https://img.shields.io/badge/macOS-13%2B-black?style=flat-square" alt="macOS 13+">
+</p>
 
-A native macOS menu bar app that gives AI agents a physical alert channel to interrupt humans. Bypasses Do Not Disturb by using NSWindow levels instead of system notifications.
+<h3 align="center">Your AI agent sends an alert → you click a button → the agent gets your response.<br>Works through DND, Focus modes, and fullscreen apps.</h3>
+
+## Quick Start
+
+1. **Download [Knok.app](https://github.com/TomasWard1/knok/releases/latest)** — open the DMG, drag to Applications, launch.
+2. **Give your agent the integration guide** — point it to [`SKILL.md`](./SKILL.md) or add the MCP config below.
+
+That's it. Knok runs in the menu bar, listens on a Unix socket, and your agent handles the rest.
+
+### MCP Setup (optional — agents can also use the socket directly)
+
+<details>
+<summary><b>Claude Code</b></summary>
+
+Add to `~/.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "knok": {
+      "command": "/Applications/Knok.app/Contents/MacOS/knok-mcp"
+    }
+  }
+}
+```
+</details>
+
+<details>
+<summary><b>Codex CLI</b></summary>
+
+Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.knok]
+command = "/Applications/Knok.app/Contents/MacOS/knok-mcp"
+```
+</details>
+
+<details>
+<summary><b>Windsurf</b></summary>
+
+Add to `~/.codeium/windsurf/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "knok": {
+      "command": "/Applications/Knok.app/Contents/MacOS/knok-mcp"
+    }
+  }
+}
+```
+</details>
 
 ## Why
 
-AI agents run in the background. When they need human input -- approval, a decision, attention -- they have no reliable way to break through. System notifications get swallowed by DND, focus modes, and notification fatigue. Knok solves this by rendering alerts as native macOS windows at elevated window levels (`floating`, `modalPanel`, `screenSaver`), making them impossible to miss.
+AI agents run in the background. When they need human input — approval, a decision, attention — they have no reliable way to break through. System notifications get swallowed by DND, Focus modes, and notification fatigue.
 
-Agents connect via a Unix domain socket at `~/.knok/knok.sock`. Send a JSON payload, get back the human's response. Works from any language, any runtime.
+Knok renders alerts as native macOS windows at elevated window levels, making them impossible to miss. The agent sends a question, the human responds with action buttons, and the agent gets the answer back — a complete bidirectional channel.
+
+## Why Not...
+
+- **`osascript` / `display dialog`** Blocks the process, respects DND, looks like it's from 2005. No urgency tiers, no MCP. It works, but it's not built for agents.
+- **terminal-notifier** Fires a macOS notification and forgets about it. DND eats it. No response back. One-way street.
+- **ntfy.sh** Great for push notifications to your phone. But push-only, your agent can't get an answer back. Doesn't bypass DND on desktop.
+- **Pushover** Same deal: push-only, needs an account, no MCP, no DND bypass on macOS.
+
+Knok is the only tool purpose-built for **agent ↔ human** communication: bidirectional, breaks through DND, 4 urgency tiers, and native MCP support.
+
+## Alert Levels
+
+| Level | What it does | When to use it |
+|-------|-------------|----------------|
+| `whisper` | Small toast, bottom-right. Auto-dismisses in 5s. | Task finished, FYI, no action needed |
+| `nudge` | Floating banner with buttons. Stays until dismissed. | Need a decision, not urgent |
+| `knock` | Overlay bar at top of screen. Sound + optional TTS. | Time-sensitive, needs response now |
+| `break` | Full-screen takeover on all displays. Must acknowledge. | Critical — stop everything |
+
+All levels support custom action buttons, SF Symbols icons, hex accent colors, and text-to-speech.
+
+**Smart defaults:** Knok auto-detects icon and color from the title — "error" → red, "build" → green, "PR" → violet. No config needed for common cases.
 
 ## Architecture
 
@@ -45,298 +124,109 @@ Agents connect via a Unix domain socket at `~/.knok/knok.sock`. Send a JSON payl
              +------------------+
 ```
 
-Three binaries, one project:
+Three binaries ship inside Knok.app:
 
-1. **Knok.app** -- menu bar app that listens on the socket and renders alerts
-2. **knok** -- CLI for scripts and agents
-3. **knok-mcp** -- MCP server (stdio transport) for Claude Code, Cursor, etc.
+| Binary | Role |
+|--------|------|
+| **Knok.app** | Menu bar app — renders alerts, manages the socket |
+| **knok-cli** | CLI for scripts and shell agents |
+| **knok-mcp** | MCP server (stdio) for Claude Code, Codex, Windsurf, etc. |
 
-## Alert Levels
+**Four ways to connect:**
+1. **MCP tool** — your agent calls the `alert` tool natively
+2. **Unix socket** — send JSON to `~/.knok/knok.sock`, get response back
+3. **CLI** — `knok whisper "done"` from any script or shell
+4. **HTTP** — `POST /alert` for remote agents (VPS, CI/CD) via Tailscale or SSH tunnel
 
-| Level     | Window Level    | Behavior                                                        | Default TTL |
-|-----------|-----------------|-----------------------------------------------------------------|-------------|
-| `whisper` | `.floating`     | Small toast in bottom-right corner. Auto-dismisses.             | 5s          |
-| `nudge`   | `.floating`     | Floating banner with action buttons. Stays until dismissed.     | manual      |
-| `knock`   | `.modalPanel`   | Overlay bar at top of screen. Sound + optional TTS.             | manual      |
-| `break`   | `.screenSaver`  | Full-screen takeover on all displays. Blur + pulsing icon. Must acknowledge. | manual |
+## For AI Agents
 
-All levels support custom action buttons, SF Symbols, hex accent colors, and text-to-speech.
+Knok ships with [`SKILL.md`](./SKILL.md) — a structured integration guide designed for LLM consumption. It includes:
 
-## Installation
+- **Decision tree** for choosing the right connection method
+- **Priority order**: socket → HTTP → CLI → MCP
+- **Full payload schema** with smart defaults
+- **Response format** and exit code semantics
+- **Troubleshooting table** for common errors
+- **Remote access setup** via Tailscale, SSH tunnels, or Cloudflare Tunnel
 
-### Build from source
+Point your agent at SKILL.md and it will know how to use Knok autonomously.
+
+### Quick Examples
 
 ```bash
-git clone https://github.com/TomasWard1/knok.git
-cd knok
+# Socket — fastest, always works if Knok.app is running
+echo '{"level":"nudge","title":"Deploy?","actions":[{"label":"Yes","id":"yes"},{"label":"No","id":"no"}]}' | nc -U ~/.knok/knok.sock
 
-# Build all targets (app + CLI + MCP server)
-swift build -c release
+# CLI — great for shell scripts
+knok knock "Ship to prod?" --action "Approve:approve" --action "Reject:reject"
 
-# Create .app bundle
-mkdir -p /tmp/Knok.app/Contents/MacOS
-cp .build/release/KnokApp /tmp/Knok.app/Contents/MacOS/KnokApp
-cp Sources/KnokApp/Info.plist /tmp/Knok.app/Contents/Info.plist
-
-# Launch
-open /tmp/Knok.app
-
-# Install CLI and MCP server to a directory in your PATH
-cp .build/release/knok /usr/local/bin/knok
-cp .build/release/knok-mcp /usr/local/bin/knok-mcp
+# HTTP — for remote agents (VPS, CI/CD)
+curl -X POST http://your-mac.tail12345.ts.net:9999/alert \
+  -H "Authorization: Bearer knk_yourtoken" \
+  -H "Content-Type: application/json" \
+  -d '{"level":"break","title":"Server Down","message":"3 endpoints failing"}'
 ```
 
-The app runs as a menu bar icon (no dock icon). It creates the socket at `~/.knok/knok.sock` on launch.
-
-## MCP Server
-
-Knok ships an MCP server (`knok-mcp`) that exposes a single `alert` tool over stdio transport.
-
-### Tool Schema
-
-```json
-{
-  "name": "alert",
-  "description": "Send an alert to the human via Knok. Urgency levels: whisper (menu bar flash), nudge (floating banner), knock (overlay), break (full-screen takeover). Returns the human's response.",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "level": {
-        "type": "string",
-        "enum": ["whisper", "nudge", "knock", "break"],
-        "description": "Urgency level"
-      },
-      "title": {
-        "type": "string",
-        "description": "Alert title"
-      },
-      "message": {
-        "type": "string",
-        "description": "Alert body text"
-      },
-      "tts": {
-        "type": "boolean",
-        "description": "Speak the message aloud via text-to-speech",
-        "default": false
-      },
-      "actions": {
-        "type": "array",
-        "description": "Buttons for the human to respond with",
-        "items": {
-          "type": "object",
-          "properties": {
-            "label": { "type": "string" },
-            "id": { "type": "string" },
-            "url": {
-              "type": "string",
-              "description": "URL to open in browser when button is clicked"
-            },
-            "icon": {
-              "type": "string",
-              "description": "SF Symbol for the button icon"
-            }
-          }
-        }
-      },
-      "ttl": {
-        "type": "integer",
-        "description": "Auto-dismiss after N seconds (0 = never)",
-        "default": 0
-      },
-      "icon": {
-        "type": "string",
-        "description": "SF Symbol name for the alert icon (e.g. 'video.fill', 'bolt.fill')"
-      },
-      "color": {
-        "type": "string",
-        "description": "Hex accent color (e.g. '#A855F7'). Auto-detected from title if omitted"
-      }
-    },
-    "required": ["level", "title"]
-  }
-}
-```
-
-### Response
-
-The tool returns a JSON object with the human's action:
-
-```json
-{ "action": "dismissed" }
-{ "action": "timeout" }
-{ "action": "approve" }
-```
-
-The `action` field is either `"dismissed"`, `"timeout"`, or the `id` of the button the human clicked.
-
-### Claude Code
-
-Add to `~/.claude.json`:
-
-```json
-{
-  "mcpServers": {
-    "knok": {
-      "command": "/usr/local/bin/knok-mcp"
-    }
-  }
-}
-```
-
-Or if using the app bundle directly (no PATH install needed):
-
-```json
-{
-  "mcpServers": {
-    "knok": {
-      "command": "/Applications/Knok.app/Contents/MacOS/knok-mcp"
-    }
-  }
-}
-```
-
-### Codex CLI
-
-Add to `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.knok]
-command = "/usr/local/bin/knok-mcp"
-```
-
-Or with the app bundle path:
-
-```toml
-[mcp_servers.knok]
-command = "/Applications/Knok.app/Contents/MacOS/knok-mcp"
-```
-
-### Windsurf
-
-Add to `~/.codeium/windsurf/mcp_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "knok": {
-      "command": "/usr/local/bin/knok-mcp"
-    }
-  }
-}
-```
-
-## CLI
-
-The `knok` CLI sends alerts from the command line. Each alert level is a subcommand.
-
-### Usage
+## CLI Reference
 
 ```
-USAGE: knok <subcommand> <message> [--title <title>] [--tts] [--action <label:id[:url]>...] [--ttl <seconds>] [--icon <sf-symbol>] [--color <hex>]
-
-SUBCOMMANDS:
-  whisper     Send a whisper-level alert (menu bar flash)
-  nudge       Send a nudge-level alert (floating banner)
-  knock       Send a knock-level alert (overlay)
-  break       Send a break-level alert (full-screen takeover)
+USAGE: knok <level> <message> [options]
+LEVELS: whisper, nudge, knock, break
 ```
-
-### Flags
 
 | Flag | Description |
 |------|-------------|
-| `--title <string>` | Alert title (defaults to the message argument) |
+| `--title <string>` | Alert title (defaults to the message) |
 | `--tts` | Speak the message via text-to-speech |
-| `--action <label:id[:url]>` | Add a button. Repeatable. Format: `Label:id` or `Label:id:https://...` |
-| `--ttl <int>` | Auto-dismiss after N seconds (0 = never) |
+| `--action <label:id[:url]>` | Add a button. Repeatable. |
+| `--ttl <int>` | Auto-dismiss after N seconds |
 | `--icon <string>` | SF Symbol name (e.g. `bolt.fill`) |
 | `--color <string>` | Hex accent color (e.g. `#A855F7`) |
 
-### Exit Codes
-
-| Code | Meaning |
-|------|---------|
-| 0    | Human clicked an action button |
-| 1    | Alert was dismissed |
-| 2    | Alert timed out |
-
-### Examples
+**Exit codes:** `0` = action clicked · `1` = dismissed · `2` = timed out
 
 ```bash
-# Simple whisper -- appears and auto-dismisses
-knok whisper "Build succeeded"
-
-# Nudge with a title and body
-knok nudge "PR #42 needs your review" --title "Code Review"
-
-# Knock with action buttons
-knok knock "Deploy to production?" \
-  --title "Deploy Ready" \
-  --action "Approve:approve" \
-  --action "Reject:reject"
-
-# Break with TTS, custom icon and color
-knok break "Server is down" \
-  --title "Critical Alert" \
-  --tts \
-  --icon "exclamationmark.triangle.fill" \
-  --color "#FF4444"
-
-# Action button that opens a URL
-knok nudge "New PR from @alice" \
-  --title "Pull Request" \
-  --action "Open:open:https://github.com/org/repo/pull/42"
-
-# Auto-dismiss after 10 seconds
-knok nudge "Meeting in 5 minutes" --ttl 10
-
-# Use exit code in scripts
-knok knock "Ship it?" --action "Yes:yes" --action "No:no"
+# Use exit codes in scripts
+knok knock "Deploy?" --action "Yes:yes" --action "No:no"
 if [ $? -eq 0 ]; then
-  echo "User approved"
+  echo "Approved"
 fi
 ```
 
 ## Settings
 
-Click the menu bar icon and select "Settings..." to configure:
+Click the menu bar icon → Settings:
 
-| Tab        | Options                                                                 |
-|------------|-------------------------------------------------------------------------|
-| Sounds     | Global enable/disable, volume slider, per-level sound selection (Tink, Glass, Purr, Sosumi, etc.) |
-| Speech     | Enable/disable TTS, voice selection, speed control                      |
-| Appearance | Font size (small / medium / large)                                      |
-| Behavior   | Show alerts in all Spaces, per-level auto-dismiss timers, launch at login |
+| Tab | Options |
+|-----|---------|
+| **Sounds** | Global toggle, volume, per-level sound selection |
+| **Speech** | TTS toggle, voice, speed |
+| **Appearance** | Font size (small / medium / large) |
+| **Behavior** | Show in all Spaces, per-level auto-dismiss, launch at login |
+| **Network** | HTTP server toggle, port, auth token, bind address |
 
-The menu bar popover also shows a history of recent alerts (up to 20) with their level, response, and relative timestamp.
-
-### Smart Defaults
-
-Knok auto-detects icon and accent color from the alert title when not explicitly set:
-
-- Titles containing "error" or "fail" -- red accent, error icon
-- Titles containing "build", "deploy", or "pass" -- green accent, bolt/check icon
-- Titles containing "pr" or "review" -- violet accent, pull request icon
-- Everything else -- blue with a level-appropriate icon
-
-## For AI Agents
-
-Read [`SKILL.md`](./SKILL.md) for the integration guide — how to connect to Knok and send notifications via socket, CLI, or MCP.
+The menu bar popover shows a history of recent alerts with level, response, and timestamp.
 
 ## Security
 
-**No telemetry. No analytics. No phone-home.** Knok collects zero data. Alert history lives in memory only and is never written to disk.
+- **No telemetry. No analytics. No phone-home.** Zero data collection. Alert history lives in memory only.
+- **Localhost by default.** The HTTP server binds to `127.0.0.1`. Remote access requires explicit opt-in via Tailscale IP — never exposed on local WiFi or public networks.
+- **Socket secured.** `~/.knok/knok.sock` is `chmod 0600`, parent directory is `0700`. Only your user can connect.
+- **Signed and notarized.** Code-signed with Developer ID, notarized by Apple, auto-updates verified with EdDSA signatures via Sparkle.
 
-**Localhost by default.** The HTTP server binds to `127.0.0.1` — nothing leaves your machine unless you opt in. For remote agents, set `"bindAddress"` to your [Tailscale](https://tailscale.com) IP — this exposes Knok only on your encrypted tailnet, not on local WiFi. Local CLI and MCP always work via the Unix socket.
+## Building from Source
 
-The app is code-signed, notarized by Apple, and auto-updates are verified with EdDSA signatures.
+For contributors or if you prefer building yourself:
 
-## Requirements
+```bash
+git clone https://github.com/TomasWard1/knok.git
+cd knok
+swift build -c release
+swift test
+```
 
-- macOS 13.0+ (Ventura)
-- Swift 6.0+
-- Xcode 16+ or a Swift 6.0 toolchain
+Requires macOS 13+, Swift 6.0+, Xcode 16+.
 
 ## License
 
-MIT -- see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).
