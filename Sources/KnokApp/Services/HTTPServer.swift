@@ -146,17 +146,9 @@ final class HTTPServer: @unchecked Sendable {
             }
         }
 
-        if payload.ttl > 0 {
-            let result = semaphore.wait(timeout: .now() + .seconds(payload.ttl))
-            if result == .timedOut {
-                response = .timeout
-                DispatchQueue.main.async {
-                    self.alertEngine.dismissCurrent()
-                }
-            }
-        } else {
-            semaphore.wait()
-        }
+        // Wait for response — TTL auto-dismiss is handled by WindowManager
+        // when the alert is actually displayed, not when it's enqueued
+        semaphore.wait()
 
         // Send response
         if let responseData = try? JSONEncoder().encode(response) {

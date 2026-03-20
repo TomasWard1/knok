@@ -8,6 +8,7 @@ public struct AlertResponse: Codable, Sendable {
     /// Pre-defined action values
     public static let dismissed = AlertResponse(action: "dismissed")
     public static let timeout = AlertResponse(action: "timeout")
+    public static let queueFull = AlertResponse(action: "queue_full")
 
     public static func buttonClicked(_ id: String) -> AlertResponse {
         AlertResponse(action: id)
