@@ -13,7 +13,7 @@
 
 ## Quick Start
 
-1. **Download [Knok.app](https://github.com/TomasWard1/knok/releases/latest)** — open the DMG, drag to Applications, launch.
+1. **Download [Knok.app](https://knokknok.app/)** — open the DMG, drag to Applications, launch.
 2. **Give your agent the integration guide** — point it to [`SKILL.md`](./SKILL.md) or add the MCP config below.
 
 That's it. Knok runs in the menu bar, listens on a Unix socket, and your agent handles the rest.
