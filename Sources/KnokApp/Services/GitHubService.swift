@@ -1,5 +1,8 @@
 import Foundation
 import KnokCore
+import os
+
+private let logger = Logger(subsystem: "app.getknok.Knok", category: "GitHubService")
 
 @MainActor
 final class GitHubService: ObservableObject {
@@ -41,7 +44,37 @@ final class GitHubService: ObservableObject {
         if let _ = KeychainHelper.readString(key: accessTokenKey) {
             isConnected = true
             username = config?.username ?? ""
-            Task { await fetchRepos() }
+            logger.info("Initialized with stored token for \(self.username)")
+            Task {
+                await validateScopes()
+                await fetchRepos()
+            }
+        }
+    }
+
+    // MARK: - Scope Validation
+
+    private func validateScopes() async {
+        guard let token = KeychainHelper.readString(key: accessTokenKey),
+              let url = URL(string: "https://api.github.com/user") else { return }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else { return }
+
+            let scopes = httpResponse.value(forHTTPHeaderField: "X-OAuth-Scopes") ?? ""
+            logger.info("Token scopes: '\(scopes)'")
+
+            if !scopes.contains("repo") {
+                logger.error("Token missing 'repo' scope — disconnecting to force re-auth")
+                disconnect()
+            }
+        } catch {
+            logger.error("Scope validation failed: \(error.localizedDescription)")
         }
     }
 
@@ -67,11 +100,10 @@ final class GitHubService: ObservableObject {
                 self.userCode = response.userCode
                 self.verificationURL = response.verificationUri
                 self.pollInterval = TimeInterval(response.interval)
+                logger.info("Device flow started, user code: \(response.userCode)")
                 startPolling()
             } catch {
-                #if DEBUG
-                print("[GitHubService] Device flow error: \(error)")
-                #endif
+                logger.error("Device flow error: \(error.localizedDescription)")
                 isAuthenticating = false
             }
         }
@@ -84,6 +116,7 @@ final class GitHubService: ObservableObject {
         userCode = ""
         verificationURL = ""
         deviceCode = ""
+        logger.info("Device flow cancelled")
     }
 
     private func startPolling() {
@@ -115,7 +148,7 @@ final class GitHubService: ObservableObject {
                     startPolling()
                     return
                 } else {
-                    // expired_token or other error
+                    logger.warning("Device flow error response: \(error)")
                     cancelDeviceFlow()
                     return
                 }
@@ -143,12 +176,12 @@ final class GitHubService: ObservableObject {
             config = GitHubConfig(username: username)
             saveConfig()
             isConnected = true
+            logger.info("OAuth complete, connected as \(self.username)")
 
+            await validateScopes()
             await fetchRepos()
         } catch {
-            #if DEBUG
-            print("[GitHubService] Poll error: \(error)")
-            #endif
+            logger.error("Token poll error: \(error.localizedDescription)")
         }
     }
 
@@ -164,27 +197,35 @@ final class GitHubService: ObservableObject {
 
         do {
             let (data, response) = try await URLSession.shared.data(for: request)
-            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 401 {
-                let refreshed = await refreshAccessToken()
-                if refreshed {
-                    return await apiGet(path: path)
-                } else {
-                    disconnect()
-                    return nil
+            if let httpResponse = response as? HTTPURLResponse {
+                if httpResponse.statusCode == 401 {
+                    logger.warning("401 on \(path), attempting token refresh")
+                    let refreshed = await refreshAccessToken()
+                    if refreshed {
+                        return await apiGet(path: path)
+                    } else {
+                        logger.error("Token refresh failed, disconnecting")
+                        disconnect()
+                        return nil
+                    }
+                }
+                if httpResponse.statusCode != 200 {
+                    logger.warning("HTTP \(httpResponse.statusCode) on \(path)")
                 }
             }
             return data
         } catch {
-            #if DEBUG
-            print("[GitHubService] API error for \(path): \(error)")
-            #endif
+            logger.error("API error for \(path): \(error.localizedDescription)")
             return nil
         }
     }
 
     private func refreshAccessToken() async -> Bool {
         guard let refreshToken = KeychainHelper.readString(key: refreshTokenKey),
-              let url = URL(string: "https://github.com/login/oauth/access_token") else { return false }
+              let url = URL(string: "https://github.com/login/oauth/access_token") else {
+            logger.warning("No refresh token available")
+            return false
+        }
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -196,16 +237,22 @@ final class GitHubService: ObservableObject {
             let (data, _) = try await URLSession.shared.data(for: request)
             let tokenResponse = try JSONDecoder().decode(GitHubTokenResponse.self, from: data)
 
-            guard let newAccessToken = tokenResponse.accessToken else { return false }
+            guard let newAccessToken = tokenResponse.accessToken else {
+                logger.error("Refresh response missing access_token")
+                return false
+            }
+
             KeychainHelper.saveString(key: accessTokenKey, value: newAccessToken)
             if let newRefreshToken = tokenResponse.refreshToken {
                 KeychainHelper.saveString(key: refreshTokenKey, value: newRefreshToken)
             }
-            return true
+
+            // Validate scopes on refreshed token
+            logger.info("Token refreshed, validating scopes")
+            await validateScopes()
+            return isConnected // validateScopes disconnects if scopes are missing
         } catch {
-            #if DEBUG
-            print("[GitHubService] Refresh token error: \(error)")
-            #endif
+            logger.error("Refresh token error: \(error.localizedDescription)")
             return false
         }
     }
@@ -226,6 +273,7 @@ final class GitHubService: ObservableObject {
         }
 
         repos = allRepos
+        logger.info("Fetched \(allRepos.count) repos")
 
         // Sync config repos with fetched repos
         if var cfg = config {
@@ -285,6 +333,7 @@ final class GitHubService: ObservableObject {
         repos = []
         config = nil
         try? FileManager.default.removeItem(at: configURL)
+        logger.info("Disconnected from GitHub")
     }
 
     // MARK: - Config Persistence
