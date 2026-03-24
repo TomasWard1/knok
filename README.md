@@ -214,6 +214,32 @@ The menu bar popover shows a history of recent alerts with level, response, and 
 - **Socket secured.** `~/.knok/knok.sock` is `chmod 0600`, parent directory is `0700`. Only your user can connect.
 - **Signed and notarized.** Code-signed with Developer ID, notarized by Apple, auto-updates verified with EdDSA signatures via Sparkle.
 
+## Integrations
+
+Beyond the built-in MCP, socket, CLI, and HTTP interfaces, Knok integrates with:
+
+### GitHub (built-in)
+
+Connect your GitHub account directly from Settings → GitHub. Knok monitors your enabled repos and alerts you when:
+
+- **PR ready to merge** — all CI checks passed
+- **CI failed** — a check run failed on an open PR
+
+Uses GitHub Device Flow OAuth. Polls every 60s, deduplicates alerts, auto-cleans on PR close/merge. Token stored in macOS Keychain.
+
+### Paperclip (plugin)
+
+[`paperclip-plugin-knok`](https://www.npmjs.com/package/paperclip-plugin-knok) — a native Paperclip plugin that pushes desktop notifications via Knok when inbox events occur.
+
+Subscribes to 8 Paperclip domain events (approvals, agent runs, issues, comments) and maps each to the appropriate Knok urgency level. Configurable per-event toggles and level overrides.
+
+```bash
+# Install in Paperclip
+curl -X POST http://localhost:3100/api/plugins/install \
+  -H "Content-Type: application/json" \
+  -d '{"packageName":"paperclip-plugin-knok"}'
+```
+
 ## Building from Source
 
 For contributors or if you prefer building yourself:
