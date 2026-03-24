@@ -1,5 +1,8 @@
 import Foundation
 import KnokCore
+import os
+
+private let logger = Logger(subsystem: "app.getknok.Knok", category: "GitHubPoller")
 
 @MainActor
 final class GitHubPoller {
@@ -19,9 +22,7 @@ final class GitHubPoller {
     }
 
     func start() {
-        #if DEBUG
-        print("[GitHubPoller] Starting poller (60s interval)")
-        #endif
+        logger.info("Starting poller (60s interval)")
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -33,73 +34,52 @@ final class GitHubPoller {
     }
 
     func stop() {
-        #if DEBUG
-        print("[GitHubPoller] Stopping poller")
-        #endif
+        logger.info("Stopping poller")
         timer?.invalidate()
         timer = nil
     }
 
     private func poll() async {
         guard let config = service.config else {
-            #if DEBUG
-            print("[GitHubPoller] No config, skipping poll")
-            #endif
+            logger.debug("No config, skipping poll")
             return
         }
 
         let enabledRepos = config.repos.filter { $0.enabled }
-        #if DEBUG
-        print("[GitHubPoller] Polling \(enabledRepos.count) enabled repos")
-        #endif
+        logger.debug("Polling \(enabledRepos.count) enabled repos")
 
         for repoConfig in enabledRepos {
             let key = "\(repoConfig.owner)/\(repoConfig.name)"
-            #if DEBUG
-            print("[GitHubPoller] Checking repo: \(key)")
-            #endif
 
             guard let data = await service.apiGet(path: "/repos/\(key)/pulls?state=open&sort=updated&direction=desc&per_page=10") else {
-                #if DEBUG
-                print("[GitHubPoller] Failed to fetch PRs for \(key)")
-                #endif
+                logger.warning("Failed to fetch PRs for \(key)")
                 continue
             }
 
             guard let prs = try? JSONDecoder().decode([GitHubPullRequest].self, from: data) else {
-                #if DEBUG
-                print("[GitHubPoller] Failed to decode PRs for \(key)")
-                #endif
+                logger.warning("Failed to decode PRs for \(key)")
                 continue
             }
 
             let nonDraftPRs = prs.filter { !$0.draft }
-            #if DEBUG
-            print("[GitHubPoller] Found \(nonDraftPRs.count) non-draft PRs for \(key)")
-            #endif
+            logger.debug("\(key): \(nonDraftPRs.count) non-draft PRs")
 
             for pr in nonDraftPRs {
                 let status = await checkPRStatus(repoKey: key, sha: pr.head.sha)
-                #if DEBUG
-                print("[GitHubPoller] PR #\(pr.number) status: \(status)")
-                #endif
+                logger.debug("PR #\(pr.number) (\(key)): \(String(describing: status))")
 
                 let alreadyNotified = repoConfig.notifiedPRs.contains(pr.number)
 
                 switch status {
                 case .ready:
                     if !alreadyNotified && repoConfig.notifications.prReadyToMerge {
-                        #if DEBUG
-                        print("[GitHubPoller] Showing ready-to-merge alert for PR #\(pr.number)")
-                        #endif
+                        logger.info("Alert: PR #\(pr.number) ready to merge (\(key))")
                         showReadyAlert(repo: key, pr: pr)
                         markNotified(owner: repoConfig.owner, name: repoConfig.name, prNumber: pr.number)
                     }
                 case .failing:
                     if !alreadyNotified && repoConfig.notifications.ciFailure {
-                        #if DEBUG
-                        print("[GitHubPoller] Showing CI failure alert for PR #\(pr.number)")
-                        #endif
+                        logger.info("Alert: CI failed for PR #\(pr.number) (\(key))")
                         showFailureAlert(repo: key, pr: pr)
                         markNotified(owner: repoConfig.owner, name: repoConfig.name, prNumber: pr.number)
                     }
@@ -143,9 +123,7 @@ final class GitHubPoller {
             }
         }
 
-        #if DEBUG
-        print("[GitHubPoller] Failed to get CI status for \(repoKey) @ \(sha)")
-        #endif
+        logger.warning("Failed to get CI status for \(repoKey) @ \(sha)")
         return .pending
     }
 
