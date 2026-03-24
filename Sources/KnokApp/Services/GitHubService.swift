@@ -46,35 +46,26 @@ final class GitHubService: ObservableObject {
             username = config?.username ?? ""
             logger.info("Initialized with stored token for \(self.username)")
             Task {
-                await validateScopes()
+                await validateToken()
                 await fetchRepos()
             }
         }
     }
 
-    // MARK: - Scope Validation
+    // MARK: - Token Validation
 
-    private func validateScopes() async {
-        guard let token = KeychainHelper.readString(key: accessTokenKey),
-              let url = URL(string: "https://api.github.com/user") else { return }
+    /// Validates that the token can access private repos (GitHub App tokens
+    /// don't use OAuth scopes — permissions come from the app config).
+    private func validateToken() async {
+        guard let data = await apiGet(path: "/user/repos?per_page=1&type=private") else {
+            logger.error("Token validation failed — could not reach GitHub API")
+            return
+        }
 
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse else { return }
-
-            let scopes = httpResponse.value(forHTTPHeaderField: "X-OAuth-Scopes") ?? ""
-            logger.info("Token scopes: '\(scopes)'")
-
-            if !scopes.contains("repo") {
-                logger.error("Token missing 'repo' scope — disconnecting to force re-auth")
-                disconnect()
-            }
-        } catch {
-            logger.error("Scope validation failed: \(error.localizedDescription)")
+        if let repos = try? JSONDecoder().decode([GitHubRepo].self, from: data) {
+            logger.info("Token validation passed (private repo access: \(repos.count > 0 ? "yes" : "no visible private repos"))")
+        } else {
+            logger.warning("Token validation: unexpected response decoding repos")
         }
     }
 
@@ -178,7 +169,7 @@ final class GitHubService: ObservableObject {
             isConnected = true
             logger.info("OAuth complete, connected as \(self.username)")
 
-            await validateScopes()
+            await validateToken()
             await fetchRepos()
         } catch {
             logger.error("Token poll error: \(error.localizedDescription)")
@@ -247,10 +238,9 @@ final class GitHubService: ObservableObject {
                 KeychainHelper.saveString(key: refreshTokenKey, value: newRefreshToken)
             }
 
-            // Validate scopes on refreshed token
-            logger.info("Token refreshed, validating scopes")
-            await validateScopes()
-            return isConnected // validateScopes disconnects if scopes are missing
+            logger.info("Token refreshed successfully")
+            await validateToken()
+            return true
         } catch {
             logger.error("Refresh token error: \(error.localizedDescription)")
             return false
