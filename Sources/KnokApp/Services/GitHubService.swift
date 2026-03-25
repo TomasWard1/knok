@@ -9,6 +9,7 @@ final class GitHubService: ObservableObject {
     // MARK: - Constants
 
     private let clientID = "Iv23lihJtKdAxKbAPC2N"
+    private let appSlug = "knok-app"
     private let accessTokenKey = "github_access_token"
     private let refreshTokenKey = "github_refresh_token"
     private let configURL: URL = {
@@ -26,6 +27,7 @@ final class GitHubService: ObservableObject {
     @Published var verificationURL = ""
     @Published var repos: [GitHubRepo] = []
     @Published var config: GitHubConfig?
+    @Published var isAppInstalled = true
 
     // MARK: - Private
 
@@ -47,6 +49,7 @@ final class GitHubService: ObservableObject {
             logger.info("Initialized with stored token for \(self.username)")
             Task {
                 await validateToken()
+                await checkInstallation()
                 await fetchRepos()
             }
         }
@@ -170,6 +173,7 @@ final class GitHubService: ObservableObject {
             logger.info("OAuth complete, connected as \(self.username)")
 
             await validateToken()
+            await checkInstallation()
             await fetchRepos()
         } catch {
             logger.error("Token poll error: \(error.localizedDescription)")
@@ -319,6 +323,33 @@ final class GitHubService: ObservableObject {
         } catch {
             logger.error("Refresh token error: \(error.localizedDescription)")
             return false
+        }
+    }
+
+    // MARK: - App Installation
+
+    var installURL: URL {
+        URL(string: "https://github.com/apps/\(appSlug)/installations/new")!
+    }
+
+    func checkInstallation() async {
+        guard let data = await apiGet(path: "/user/installations") else {
+            logger.warning("Could not check app installations")
+            return
+        }
+
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let installations = json["installations"] as? [[String: Any]] {
+            let installed = installations.contains { inst in
+                if let slug = inst["app_slug"] as? String {
+                    return slug == appSlug
+                }
+                return false
+            }
+            isAppInstalled = installed
+            logger.info("App installation check: \(installed ? "installed" : "not installed") (\(installations.count) installations)")
+        } else {
+            logger.warning("Could not decode installations response")
         }
     }
 
