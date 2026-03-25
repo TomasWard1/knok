@@ -5,9 +5,9 @@ final class HTTPServer: @unchecked Sendable {
     private let alertEngine: AlertEngine
     private let configManager: ConfigManager
     private let webhookHandler: GitHubWebhookHandler?
-    private var listenFD: Int32 = -1
+    private var listenFDs: [Int32] = []
     private var isRunning = false
-    private var acceptThread: Thread?
+    private var acceptThreads: [Thread] = []
 
     init(alertEngine: AlertEngine, configManager: ConfigManager, webhookHandler: GitHubWebhookHandler? = nil) {
         self.alertEngine = alertEngine
@@ -19,47 +19,88 @@ final class HTTPServer: @unchecked Sendable {
         let config = configManager.config
         guard config.httpServer.enabled else { return }
 
-        listenFD = socket(AF_INET, SOCK_STREAM, 0)
-        guard listenFD >= 0 else { return }
+        let port = config.httpServer.port
 
-        // Allow address reuse
+        // Always listen on localhost (for Tailscale Funnel)
+        var addresses = ["127.0.0.1"]
+
+        // Also listen on Tailscale IP if available (for AI agents on the tailnet)
+        if let tailscaleIP = Self.tailscaleIPv4(), tailscaleIP != "127.0.0.1" {
+            addresses.append(tailscaleIP)
+        }
+
+        for address in addresses {
+            if let fd = createListener(address: address, port: port) {
+                listenFDs.append(fd)
+                let thread = Thread { self.acceptLoop(fd: fd) }
+                acceptThreads.append(thread)
+            }
+        }
+
+        guard !listenFDs.isEmpty else { return }
+        isRunning = true
+        acceptThreads.forEach { $0.start() }
+    }
+
+    private func createListener(address: String, port: UInt16) -> Int32? {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return nil }
+
         var reuse: Int32 = 1
-        setsockopt(listenFD, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, socklen_t(MemoryLayout<Int32>.size))
 
-        // Bind to configured address (default: 127.0.0.1 loopback only)
         var addr = sockaddr_in()
         addr.sin_family = sa_family_t(AF_INET)
-        addr.sin_port = config.httpServer.port.bigEndian
-        addr.sin_addr.s_addr = inet_addr(config.httpServer.bindAddress)
+        addr.sin_port = port.bigEndian
+        addr.sin_addr.s_addr = inet_addr(address)
 
         let bindResult = withUnsafePointer(to: &addr) { ptr in
             ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockPtr in
-                Darwin.bind(listenFD, sockPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
+                Darwin.bind(fd, sockPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
             }
         }
         guard bindResult == 0 else {
-            close(listenFD)
-            listenFD = -1
-            return
+            close(fd)
+            return nil
         }
 
-        guard listen(listenFD, 5) == 0 else {
-            close(listenFD)
-            listenFD = -1
-            return
+        guard listen(fd, 5) == 0 else {
+            close(fd)
+            return nil
         }
 
-        isRunning = true
-        acceptThread = Thread { self.acceptLoop() }
-        acceptThread?.start()
+        return fd
+    }
+
+    /// Finds the Tailscale utun interface IPv4 address (100.x.x.x)
+    private static func tailscaleIPv4() -> String? {
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return nil }
+        defer { freeifaddrs(ifaddr) }
+
+        for ptr in sequence(first: first, next: { $0.pointee.ifa_next }) {
+            let name = String(cString: ptr.pointee.ifa_name)
+            guard name.hasPrefix("utun"),
+                  ptr.pointee.ifa_addr.pointee.sa_family == sa_family_t(AF_INET) else { continue }
+
+            var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+            let result = getnameinfo(ptr.pointee.ifa_addr, socklen_t(ptr.pointee.ifa_addr.pointee.sa_len),
+                                     &hostname, socklen_t(hostname.count), nil, 0, NI_NUMERICHOST)
+            if result == 0 {
+                let ip = String(cString: hostname)
+                if ip.hasPrefix("100.") { return ip }
+            }
+        }
+        return nil
     }
 
     func stop() {
         isRunning = false
-        if listenFD >= 0 {
-            close(listenFD)
-            listenFD = -1
+        for fd in listenFDs {
+            close(fd)
         }
+        listenFDs = []
+        acceptThreads = []
     }
 
     func restart() {
@@ -71,7 +112,7 @@ final class HTTPServer: @unchecked Sendable {
 
     // MARK: - Accept Loop
 
-    private func acceptLoop() {
+    private func acceptLoop(fd listenFD: Int32) {
         while isRunning {
             var clientAddr = sockaddr_in()
             var addrLen = socklen_t(MemoryLayout<sockaddr_in>.size)
