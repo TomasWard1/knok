@@ -28,6 +28,21 @@ struct NudgeView: View {
                     .lineLimit(1)
 
                 Spacer(minLength: 0)
+
+                Button {
+                    dismissWithAnimation { onAction(.dismissed) }
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11 * scale, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.4))
+                        .frame(width: 22, height: 22)
+                        .background(.white.opacity(0.1))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .onHover { inside in
+                    if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
             }
 
             // Message
