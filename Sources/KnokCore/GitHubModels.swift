@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 // MARK: - Config Models (persisted to ~/.knok/github.json)
 
@@ -6,10 +7,23 @@ import Foundation
 public struct GitHubConfig: Codable, Sendable {
     public var username: String
     public var repos: [GitHubRepoConfig]
+    public var webhookSecret: String?
 
-    public init(username: String, repos: [GitHubRepoConfig] = []) {
+    public init(username: String, repos: [GitHubRepoConfig] = [], webhookSecret: String? = nil) {
         self.username = username
         self.repos = repos
+        self.webhookSecret = webhookSecret
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case username, repos
+        case webhookSecret = "webhook_secret"
+    }
+
+    public static func generateWebhookSecret() -> String {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        _ = SecRandomCopyBytes(kSecRandomDefault, 32, &bytes)
+        return bytes.map { String(format: "%02x", $0) }.joined()
     }
 }
 
@@ -21,24 +35,29 @@ public struct GitHubRepoConfig: Codable, Sendable {
     public var notifications: NotificationPreferences
     /// PR numbers we've already notified as "ready to merge"
     public var notifiedPRs: Set<Int>
+    /// GitHub webhook ID for deletion when disabling
+    public var webhookId: Int?
 
     public init(
         owner: String,
         name: String,
         enabled: Bool = true,
         notifications: NotificationPreferences = NotificationPreferences(),
-        notifiedPRs: Set<Int> = []
+        notifiedPRs: Set<Int> = [],
+        webhookId: Int? = nil
     ) {
         self.owner = owner
         self.name = name
         self.enabled = enabled
         self.notifications = notifications
         self.notifiedPRs = notifiedPRs
+        self.webhookId = webhookId
     }
 
     private enum CodingKeys: String, CodingKey {
         case owner, name, enabled, notifications
         case notifiedPRs = "notified_prs"
+        case webhookId = "webhook_id"
     }
 }
 
@@ -46,18 +65,26 @@ public struct GitHubRepoConfig: Codable, Sendable {
 public struct NotificationPreferences: Codable, Sendable {
     public var prReadyToMerge: Bool
     public var ciFailure: Bool
+    public var prOpened: Bool
+    public var prMerged: Bool
 
     public init(
         prReadyToMerge: Bool = true,
-        ciFailure: Bool = true
+        ciFailure: Bool = true,
+        prOpened: Bool = false,
+        prMerged: Bool = false
     ) {
         self.prReadyToMerge = prReadyToMerge
         self.ciFailure = ciFailure
+        self.prOpened = prOpened
+        self.prMerged = prMerged
     }
 
     private enum CodingKeys: String, CodingKey {
         case prReadyToMerge = "pr_ready_to_merge"
         case ciFailure = "ci_failure"
+        case prOpened = "pr_opened"
+        case prMerged = "pr_merged"
     }
 }
 
@@ -212,5 +239,82 @@ public struct GitHubTokenResponse: Codable, Sendable {
         case refreshTokenExpiresIn = "refresh_token_expires_in"
         case error
         case errorDescription = "error_description"
+    }
+}
+
+/// Response from POST /repos/{owner}/{repo}/hooks
+public struct GitHubWebhookResponse: Codable, Sendable {
+    public let id: Int
+}
+
+// MARK: - Webhook Event Models
+
+public struct GitHubWebhookCheckRunEvent: Codable, Sendable {
+    public let action: String
+    public let checkRun: WebhookCheckRun
+    public let repository: WebhookRepository
+
+    private enum CodingKeys: String, CodingKey {
+        case action
+        case checkRun = "check_run"
+        case repository
+    }
+
+    public struct WebhookCheckRun: Codable, Sendable {
+        public let conclusion: String?
+        public let status: String
+        public let pullRequests: [WebhookPRRef]
+
+        private enum CodingKeys: String, CodingKey {
+            case conclusion, status
+            case pullRequests = "pull_requests"
+        }
+    }
+
+    public struct WebhookPRRef: Codable, Sendable {
+        public let number: Int
+        public let head: WebhookPRHead
+    }
+
+    public struct WebhookPRHead: Codable, Sendable {
+        public let sha: String
+    }
+}
+
+public struct GitHubWebhookPREvent: Codable, Sendable {
+    public let action: String
+    public let pullRequest: WebhookPullRequest
+    public let repository: WebhookRepository
+
+    private enum CodingKeys: String, CodingKey {
+        case action
+        case pullRequest = "pull_request"
+        case repository
+    }
+
+    public struct WebhookPullRequest: Codable, Sendable {
+        public let number: Int
+        public let title: String
+        public let htmlUrl: String
+        public let draft: Bool
+        public let merged: Bool?
+        public let head: WebhookPRHead
+
+        private enum CodingKeys: String, CodingKey {
+            case number, title, draft, merged, head
+            case htmlUrl = "html_url"
+        }
+
+        public struct WebhookPRHead: Codable, Sendable {
+            public let sha: String
+        }
+    }
+}
+
+public struct WebhookRepository: Codable, Sendable {
+    public let fullName: String
+
+    private enum CodingKeys: String, CodingKey {
+        case fullName = "full_name"
     }
 }

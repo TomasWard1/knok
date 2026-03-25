@@ -211,6 +211,81 @@ final class GitHubService: ObservableObject {
         }
     }
 
+    func apiPost(path: String, body: Data) async -> Data? {
+        guard let token = KeychainHelper.readString(key: accessTokenKey),
+              let url = URL(string: "https://api.github.com\(path)") else { return nil }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse {
+                if httpResponse.statusCode == 401 {
+                    logger.warning("401 on POST \(path), attempting token refresh")
+                    let refreshed = await refreshAccessToken()
+                    if refreshed {
+                        return await apiPost(path: path, body: body)
+                    } else {
+                        logger.error("Token refresh failed, disconnecting")
+                        disconnect()
+                        return nil
+                    }
+                }
+                if httpResponse.statusCode < 200 || httpResponse.statusCode >= 300 {
+                    let bodyStr = String(data: data, encoding: .utf8) ?? ""
+                    logger.warning("HTTP \(httpResponse.statusCode) on POST \(path): \(bodyStr)")
+                    return nil
+                }
+            }
+            return data
+        } catch {
+            logger.error("API POST error for \(path): \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    func apiDelete(path: String) async -> Bool {
+        guard let token = KeychainHelper.readString(key: accessTokenKey),
+              let url = URL(string: "https://api.github.com\(path)") else { return false }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse {
+                if httpResponse.statusCode == 401 {
+                    logger.warning("401 on DELETE \(path), attempting token refresh")
+                    let refreshed = await refreshAccessToken()
+                    if refreshed {
+                        return await apiDelete(path: path)
+                    } else {
+                        logger.error("Token refresh failed, disconnecting")
+                        disconnect()
+                        return false
+                    }
+                }
+                if httpResponse.statusCode == 204 || httpResponse.statusCode == 200 {
+                    return true
+                }
+                let bodyStr = String(data: data, encoding: .utf8) ?? ""
+                logger.warning("HTTP \(httpResponse.statusCode) on DELETE \(path): \(bodyStr)")
+                return false
+            }
+            return false
+        } catch {
+            logger.error("API DELETE error for \(path): \(error.localizedDescription)")
+            return false
+        }
+    }
+
     private func refreshAccessToken() async -> Bool {
         guard let refreshToken = KeychainHelper.readString(key: refreshTokenKey),
               let url = URL(string: "https://github.com/login/oauth/access_token") else {
@@ -311,6 +386,78 @@ final class GitHubService: ObservableObject {
         cfg.repos = repos
         config = cfg
         saveConfig()
+    }
+
+    func updateWebhookSecret(_ secret: String) {
+        guard var cfg = config else { return }
+        cfg.webhookSecret = secret
+        config = cfg
+        saveConfig()
+    }
+
+    // MARK: - Webhook Management
+
+    func createRepoWebhook(owner: String, name: String, webhookURL: String, secret: String) async -> Int? {
+        let payload: [String: Any] = [
+            "name": "web",
+            "active": true,
+            "events": ["check_run", "pull_request"],
+            "config": [
+                "url": webhookURL,
+                "content_type": "json",
+                "secret": secret
+            ]
+        ]
+
+        guard let body = try? JSONSerialization.data(withJSONObject: payload) else { return nil }
+        guard let data = await apiPost(path: "/repos/\(owner)/\(name)/hooks", body: body) else { return nil }
+
+        guard let response = try? JSONDecoder().decode(GitHubWebhookResponse.self, from: data) else {
+            logger.warning("Failed to decode webhook creation response for \(owner)/\(name)")
+            return nil
+        }
+
+        // Store webhookId in config
+        guard var cfg = config else { return response.id }
+        let key = "\(owner)/\(name)"
+        if let idx = cfg.repos.firstIndex(where: { "\($0.owner)/\($0.name)" == key }) {
+            cfg.repos[idx].webhookId = response.id
+            config = cfg
+            saveConfig()
+        }
+
+        logger.info("Created webhook \(response.id) for \(owner)/\(name)")
+        return response.id
+    }
+
+    func deleteRepoWebhook(owner: String, name: String, hookId: Int) async -> Bool {
+        let success = await apiDelete(path: "/repos/\(owner)/\(name)/hooks/\(hookId)")
+        if success {
+            guard var cfg = config else { return true }
+            let key = "\(owner)/\(name)"
+            if let idx = cfg.repos.firstIndex(where: { "\($0.owner)/\($0.name)" == key }) {
+                cfg.repos[idx].webhookId = nil
+                config = cfg
+                saveConfig()
+            }
+            logger.info("Deleted webhook \(hookId) for \(owner)/\(name)")
+        } else {
+            logger.warning("Failed to delete webhook \(hookId) for \(owner)/\(name)")
+        }
+        return success
+    }
+
+    func syncWebhooks(webhookURL: String) async {
+        guard let cfg = config, let secret = cfg.webhookSecret, !secret.isEmpty else { return }
+
+        for repo in cfg.repos where repo.enabled && repo.webhookId == nil {
+            let _ = await createRepoWebhook(
+                owner: repo.owner,
+                name: repo.name,
+                webhookURL: webhookURL,
+                secret: secret
+            )
+        }
     }
 
     // MARK: - Disconnect

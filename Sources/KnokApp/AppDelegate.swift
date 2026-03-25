@@ -17,7 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     )
 
     private var settingsWindow: NSWindow?
-    private var gitHubPoller: GitHubPoller?
+    var webhookHandler: GitHubWebhookHandler?
 
     @MainActor var alertHistory: AlertHistory { alertEngine.history }
 
@@ -33,16 +33,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         socketServer = SocketServer(alertEngine: alertEngine)
         socketServer?.start()
 
-        // Start HTTP server
-        httpServer = HTTPServer(alertEngine: alertEngine, configManager: configManager)
-        httpServer?.start()
-
         // Initialize GitHub integration
         gitHubService.initialize()
-        if gitHubService.isConnected {
-            gitHubPoller = GitHubPoller(service: gitHubService, alertEngine: alertEngine)
-            gitHubPoller?.start()
-        }
+
+        // Initialize webhook handler
+        webhookHandler = GitHubWebhookHandler(alertEngine: alertEngine, gitHubService: gitHubService)
+
+        // Start HTTP server with webhook support
+        httpServer = HTTPServer(alertEngine: alertEngine, configManager: configManager, webhookHandler: webhookHandler)
+        httpServer?.start()
     }
 
     func restartHTTPServer() {
@@ -60,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settings: settings,
             configManager: configManager,
             gitHubService: gitHubService,
+            webhookHandler: webhookHandler,
             onHTTPRestart: { [weak self] in
                 self?.restartHTTPServer()
             }
@@ -85,7 +85,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         socketServer?.stop()
         httpServer?.stop()
-        gitHubPoller?.stop()
         try? FileManager.default.removeItem(atPath: KnokConstants.socketPath)
     }
 }

@@ -6,6 +6,7 @@ struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     let configManager: ConfigManager
     let gitHubService: GitHubService
+    var webhookHandler: GitHubWebhookHandler?
     var onHTTPRestart: () -> Void = {}
 
     @State private var httpEnabled: Bool = true
@@ -35,7 +36,7 @@ struct SettingsView: View {
             networkTab
                 .tabItem { Label("Network", systemImage: "network") }
                 .tag(4)
-            GitHubSettingsView(service: gitHubService)
+            GitHubSettingsView(service: gitHubService, webhookHandler: webhookHandler)
                 .tabItem { Label("GitHub", systemImage: "arrow.triangle.branch") }
                 .tag(5)
             aboutTab

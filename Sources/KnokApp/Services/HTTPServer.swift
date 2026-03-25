@@ -4,13 +4,15 @@ import KnokCore
 final class HTTPServer: @unchecked Sendable {
     private let alertEngine: AlertEngine
     private let configManager: ConfigManager
+    private let webhookHandler: GitHubWebhookHandler?
     private var listenFD: Int32 = -1
     private var isRunning = false
     private var acceptThread: Thread?
 
-    init(alertEngine: AlertEngine, configManager: ConfigManager) {
+    init(alertEngine: AlertEngine, configManager: ConfigManager, webhookHandler: GitHubWebhookHandler? = nil) {
         self.alertEngine = alertEngine
         self.configManager = configManager
+        self.webhookHandler = webhookHandler
     }
 
     func start() {
@@ -111,12 +113,19 @@ final class HTTPServer: @unchecked Sendable {
             return
         }
 
-        // Only /alert endpoint
-        guard request.path == "/alert" else {
+        switch request.path {
+        case "/alert":
+            handleAlertRequest(fd: fd, request: request)
+        case "/github/webhook":
+            handleWebhookRequest(fd: fd, request: request)
+        default:
             sendResponse(fd: fd, status: 404, statusText: "Not Found", body: errorJSON("Unknown endpoint"))
-            return
         }
+    }
 
+    // MARK: - Alert Handler
+
+    private func handleAlertRequest(fd: Int32, request: HTTPRequest) {
         // Auth check
         let config = configManager.config
         if config.httpServer.authRequired {
@@ -153,6 +162,30 @@ final class HTTPServer: @unchecked Sendable {
         // Send response
         if let responseData = try? JSONEncoder().encode(response) {
             sendResponse(fd: fd, status: 200, statusText: "OK", body: responseData)
+        }
+    }
+
+    // MARK: - Webhook Handler
+
+    private func handleWebhookRequest(fd: Int32, request: HTTPRequest) {
+        guard let handler = webhookHandler else {
+            sendResponse(fd: fd, status: 503, statusText: "Service Unavailable", body: errorJSON("Webhook handler not configured"))
+            return
+        }
+
+        guard let bodyData = request.body else {
+            sendResponse(fd: fd, status: 400, statusText: "Bad Request", body: errorJSON("Missing body"))
+            return
+        }
+
+        let headers = request.headers
+
+        // Return 200 immediately — GitHub has a 10s timeout
+        sendResponse(fd: fd, status: 200, statusText: "OK", body: Data("{\"ok\":true}".utf8))
+
+        // Process async on main actor
+        DispatchQueue.main.async {
+            let _ = handler.handleRequest(headers: headers, body: bodyData)
         }
     }
 
