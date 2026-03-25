@@ -7,8 +7,9 @@ private let tailscalePath = "/Applications/Tailscale.app/Contents/MacOS/Tailscal
 
 private func runTailscale(_ args: [String]) -> Data? {
     let process = Process()
-    process.executableURL = URL(fileURLWithPath: tailscalePath)
-    process.arguments = args
+    process.executableURL = URL(fileURLWithPath: "/bin/sh")
+    let quoted = args.map { "'\($0)'" }.joined(separator: " ")
+    process.arguments = ["-c", "\(tailscalePath) \(quoted)"]
     let pipe = Pipe()
     process.standardOutput = pipe
     process.standardError = Pipe()
@@ -161,6 +162,34 @@ struct GitHubSettingsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Repositories")
                         .font(.headline)
+
+                    if !service.isAppInstalled {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Install the Knok GitHub App to access your repositories.", systemImage: "exclamationmark.triangle")
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+
+                            HStack(spacing: 8) {
+                                Button("Install on GitHub") {
+                                    NSWorkspace.shared.open(service.installURL)
+                                }
+                                .buttonStyle(.borderedProminent)
+
+                                Button("Refresh") {
+                                    Task {
+                                        await service.checkInstallation()
+                                        if service.isAppInstalled {
+                                            await service.fetchRepos()
+                                        }
+                                    }
+                                }
+                                .buttonStyle(.bordered)
+                            }
+                        }
+                        .padding(10)
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(8)
+                    }
 
                     TextField("Search repos...", text: $searchText)
                         .textFieldStyle(.roundedBorder)
@@ -417,8 +446,8 @@ struct GitHubSettingsView: View {
 
         DispatchQueue.global().async {
             let process = Process()
-            process.executableURL = URL(fileURLWithPath: tailscalePath)
-            process.arguments = ["funnel", "--bg", "9999"]
+            process.executableURL = URL(fileURLWithPath: "/bin/sh")
+            process.arguments = ["-c", "\(tailscalePath) funnel --bg 9999"]
             let outPipe = Pipe()
             let errPipe = Pipe()
             process.standardOutput = outPipe
