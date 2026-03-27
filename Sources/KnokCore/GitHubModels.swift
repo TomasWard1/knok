@@ -263,10 +263,12 @@ public struct GitHubWebhookCheckRunEvent: Codable, Sendable {
     public struct WebhookCheckRun: Codable, Sendable {
         public let conclusion: String?
         public let status: String
+        public let headSha: String
         public let pullRequests: [WebhookPRRef]
 
         private enum CodingKeys: String, CodingKey {
             case conclusion, status
+            case headSha = "head_sha"
             case pullRequests = "pull_requests"
         }
     }
@@ -317,4 +319,9 @@ public struct WebhookRepository: Codable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case fullName = "full_name"
     }
+}
+
+/// Minimal PR model from GET /repos/{owner}/{repo}/commits/{sha}/pulls
+public struct GitHubCommitPR: Codable, Sendable {
+    public let number: Int
 }
