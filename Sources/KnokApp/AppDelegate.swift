@@ -33,6 +33,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         socketServer = SocketServer(alertEngine: alertEngine)
         socketServer?.start()
 
+        // Ensure LaunchAgent is installed if launch-at-login is enabled
+        if settings.launchAtLogin && !LaunchAgentManager.isInstalled {
+            LaunchAgentManager.install()
+        }
+
         // Initialize GitHub integration
         gitHubService.initialize()
 

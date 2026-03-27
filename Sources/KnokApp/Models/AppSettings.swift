@@ -39,8 +39,10 @@ final class AppSettings: ObservableObject {
         do {
             if launchAtLogin {
                 try SMAppService.mainApp.register()
+                LaunchAgentManager.install()
             } else {
                 try SMAppService.mainApp.unregister()
+                LaunchAgentManager.uninstall()
             }
         } catch {
             self.launchAtLogin = !launchAtLogin
