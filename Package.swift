@@ -33,6 +33,7 @@ let package = Package(
             exclude: ["Info.plist"],
             resources: [
                 .process("Assets.xcassets"),
+                .process("Resources/app.getknok.Knok.plist"),
             ],
             linkerSettings: [
                 .unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist", "-Xlinker", "Sources/KnokApp/Info.plist"]),

@@ -5,6 +5,12 @@ import os
 
 private let logger = Logger(subsystem: "app.getknok.Knok", category: "GitHubWebhookHandler")
 
+/// Lightweight PR reference used internally during check_run processing
+private struct PRRef {
+    let number: Int
+    let sha: String
+}
+
 @MainActor
 final class GitHubWebhookHandler: ObservableObject {
     private let alertEngine: AlertEngine
@@ -87,28 +93,76 @@ final class GitHubWebhookHandler: ObservableObject {
         }
 
         let conclusion = event.checkRun.conclusion ?? ""
+        let headSha = event.checkRun.headSha
+
+        // Resolve associated PRs — webhook payload may have them, but GitHub sometimes sends an empty array
+        var prRefs: [PRRef] = event.checkRun.pullRequests.map { PRRef(number: $0.number, sha: $0.head.sha) }
+        if prRefs.isEmpty {
+            logger.info("check_run payload has empty pull_requests for \(repoFullName), fetching from API")
+            prRefs = await fetchPRsForCommit(repo: repoFullName, sha: headSha)
+        }
+
+        if prRefs.isEmpty {
+            logger.debug("No associated PRs for check_run on \(repoFullName) sha \(headSha)")
+            return
+        }
 
         if ["failure", "timed_out", "cancelled"].contains(conclusion) && repoConfig.notifications.ciFailure {
-            for pr in event.checkRun.pullRequests {
+            for pr in prRefs {
                 showCIFailureAlert(repo: repoFullName, prNumber: pr.number)
             }
-        } else if conclusion == "success" && !event.checkRun.pullRequests.isEmpty {
-            for pr in event.checkRun.pullRequests {
-                let alreadyNotified = repoConfig.notifiedPRs.contains(pr.number)
-                if alreadyNotified || !repoConfig.notifications.prReadyToMerge { continue }
+        } else if conclusion == "success" {
+            guard repoConfig.notifications.prReadyToMerge else { return }
 
-                // Check if ALL check runs for this commit passed
-                guard let data = await gitHubService.apiGet(path: "/repos/\(repoFullName)/commits/\(pr.head.sha)/check-runs"),
-                      let checkRuns = try? JSONDecoder().decode(GitHubCheckRunsResponse.self, from: data) else {
-                    continue
-                }
+            // Small delay to let GitHub's API reflect the just-completed check run
+            try? await Task.sleep(for: .seconds(3))
 
-                let allPassed = checkRuns.checkRuns.allSatisfy { $0.status == "completed" && $0.conclusion == "success" }
-                if allPassed {
-                    showReadyToMergeAlert(repo: repoFullName, prNumber: pr.number)
-                    markNotified(repoFullName: repoFullName, prNumber: pr.number)
-                }
+            for pr in prRefs {
+                await checkAllPassedAndNotify(repo: repoFullName, sha: pr.sha, prNumber: pr.number)
             }
+        }
+    }
+
+    /// Fetch open PRs whose head SHA matches the given commit
+    private func fetchPRsForCommit(repo: String, sha: String) async -> [PRRef] {
+        guard let data = await gitHubService.apiGet(path: "/repos/\(repo)/commits/\(sha)/pulls") else {
+            logger.warning("Failed to fetch PRs for commit \(sha) on \(repo)")
+            return []
+        }
+        guard let prs = try? JSONDecoder().decode([GitHubCommitPR].self, from: data) else {
+            logger.warning("Failed to decode PRs for commit \(sha) on \(repo)")
+            return []
+        }
+        return prs.map { PRRef(number: $0.number, sha: sha) }
+    }
+
+    /// Verify all check runs passed for a commit and fire the alert
+    private func checkAllPassedAndNotify(repo: String, sha: String, prNumber: Int) async {
+        guard let data = await gitHubService.apiGet(path: "/repos/\(repo)/commits/\(sha)/check-runs") else {
+            logger.warning("API call failed: /repos/\(repo)/commits/\(sha)/check-runs")
+            return
+        }
+        guard let checkRuns = try? JSONDecoder().decode(GitHubCheckRunsResponse.self, from: data) else {
+            logger.warning("Failed to decode check-runs response for \(repo) sha \(sha)")
+            return
+        }
+
+        let total = checkRuns.checkRuns.count
+        let passed = checkRuns.checkRuns.filter { $0.status == "completed" && $0.conclusion == "success" }.count
+        let pending = checkRuns.checkRuns.filter { $0.status != "completed" }.count
+
+        if pending > 0 {
+            logger.info("PR #\(prNumber) on \(repo): \(passed)/\(total) passed, \(pending) still pending — skipping")
+            return
+        }
+
+        let allPassed = checkRuns.checkRuns.allSatisfy { $0.status == "completed" && $0.conclusion == "success" }
+        if allPassed {
+            logger.info("All \(total) checks passed for PR #\(prNumber) on \(repo) — sending ready-to-merge alert")
+            showReadyToMergeAlert(repo: repo, prNumber: prNumber)
+        } else {
+            let failed = checkRuns.checkRuns.filter { $0.status == "completed" && $0.conclusion != "success" }
+            logger.info("PR #\(prNumber) on \(repo): \(passed)/\(total) passed, \(failed.count) not successful — skipping")
         }
     }
 
@@ -134,7 +188,6 @@ final class GitHubWebhookHandler: ObservableObject {
             if event.pullRequest.merged == true && repoConfig.notifications.prMerged {
                 showPRMergedAlert(repo: repoFullName, pr: event.pullRequest)
             }
-            cleanUpPR(repoFullName: repoFullName, prNumber: event.pullRequest.number)
         default:
             break
         }
@@ -188,23 +241,5 @@ final class GitHubWebhookHandler: ObservableObject {
             color: "#8B5CF6"
         )
         alertEngine.showAlert(payload: payload) { _ in }
-    }
-
-    // MARK: - State Management
-
-    private func markNotified(repoFullName: String, prNumber: Int) {
-        guard var cfg = gitHubService.config else { return }
-        if let idx = cfg.repos.firstIndex(where: { "\($0.owner)/\($0.name)" == repoFullName }) {
-            cfg.repos[idx].notifiedPRs.insert(prNumber)
-            gitHubService.updateRepos(cfg.repos)
-        }
-    }
-
-    private func cleanUpPR(repoFullName: String, prNumber: Int) {
-        guard var cfg = gitHubService.config else { return }
-        if let idx = cfg.repos.firstIndex(where: { "\($0.owner)/\($0.name)" == repoFullName }) {
-            cfg.repos[idx].notifiedPRs.remove(prNumber)
-            gitHubService.updateRepos(cfg.repos)
-        }
     }
 }
